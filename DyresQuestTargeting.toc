@@ -1,0 +1,15 @@
+## Interface: 16001
+## Title: Dyre's Quest Targeting
+## Notes: Keeps a targeting macro, "! Quest Targets", built from your focused quest in WoW Forever
+## Author: Dyre
+## Version: 0.1.0-beta
+## IconTexture: Interface\Icons\Ability_Hunter_SniperShot
+## Category: Quests
+## OptionalDeps: QuestieDB, Questie
+## SavedVariablesPerCharacter: DyresQuestTargetingDB
+
+Commands.lua
+Core.lua
+Quest.lua
+Macro.lua
+Options.lua

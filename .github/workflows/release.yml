@@ -1,0 +1,158 @@
+name: Test, package, and release
+
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    outputs:
+      version: ${{ steps.package.outputs.version }}
+      archive_name: ${{ steps.package.outputs.archive_name }}
+      prerelease: ${{ steps.package.outputs.prerelease }}
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Install Lua 5.1
+        run: |
+          sudo apt-get update
+          sudo apt-get install --no-install-recommends -y lua5.1
+          lua5.1 -e 'assert(_VERSION == "Lua 5.1")'
+      - name: Check syntax and runtime logic
+        run: |
+          luac5.1 -p Commands.lua Core.lua Quest.lua Macro.lua Options.lua tests/run.lua
+          lua5.1 tests/run.lua
+      - name: Test release tooling
+        run: python3 -m unittest discover -s tests -p 'test_*.py' -v
+      - name: Verify tagged source
+        if: startsWith(github.ref, 'refs/tags/')
+        run: git merge-base --is-ancestor HEAD origin/main
+      - name: Build and validate installable ZIP
+        id: package
+        env:
+          RELEASE_TAG: ${{ startsWith(github.ref, 'refs/tags/') && github.ref_name || '' }}
+        run: |
+          args=(--output dist --github-output "$GITHUB_OUTPUT")
+          if [[ -n "$RELEASE_TAG" ]]; then
+            args+=(--tag "$RELEASE_TAG")
+          fi
+          python3 scripts/build_release.py "${args[@]}" --source-commit "$GITHUB_SHA"
+          temp_dir=$(mktemp -d)
+          unzip -q dist/DyresQuestTargeting-*.zip -d "$temp_dir"
+          luac5.1 -p "$temp_dir"/DyresQuestTargeting/*.lua
+      - name: Retain verified build
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: installable-addon
+          path: dist/
+          if-no-files-found: error
+          retention-days: 30
+
+  github-release:
+    needs: build
+    if: >-
+      github.event_name == 'push' &&
+      startsWith(github.ref, 'refs/tags/') &&
+      vars.ENABLE_GITHUB_RELEASES == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    environment: release
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout publisher code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - name: Download the tested ZIP
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: installable-addon
+          path: dist
+      - name: Verify artifact and publish GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ github.ref_name }}
+          RELEASE_ARCHIVE: ${{ needs.build.outputs.archive_name }}
+          PRERELEASE: ${{ needs.build.outputs.prerelease }}
+        run: |
+          python3 scripts/verify_release.py --artifact-dir dist --tag "$RELEASE_TAG" --commit "$GITHUB_SHA" --repo "$GITHUB_REPOSITORY"
+          if gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo 'Release already exists. Inspect it before a deliberate retry; replacement is disabled.' >&2
+            exit 1
+          fi
+          args=(release create "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --verify-tag --draft --title "$RELEASE_TAG" --notes-file dist/release-notes.md)
+          if [[ "$PRERELEASE" == true ]]; then
+            args+=(--prerelease)
+          fi
+          # release.json is the WowUp/BigWigs metadata that maps the ZIP to Forever.
+          gh "${args[@]}" "dist/$RELEASE_ARCHIVE" "dist/$RELEASE_ARCHIVE.sha256" dist/release-manifest.json dist/release.json
+          python3 scripts/verify_release.py --artifact-dir dist --tag "$RELEASE_TAG" --commit "$GITHUB_SHA" --repo "$GITHUB_REPOSITORY"
+          gh release edit "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --draft=false
+
+  curseforge:
+    needs: [build, github-release]
+    if: >-
+      github.event_name == 'push' &&
+      startsWith(github.ref, 'refs/tags/') &&
+      vars.ENABLE_GITHUB_RELEASES == 'true' &&
+      vars.ENABLE_CURSEFORGE_UPLOADS == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    environment: release
+    steps:
+      - name: Checkout publisher code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - name: Download the same tested ZIP
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: installable-addon
+          path: dist
+      - name: Verify commit and tag before CurseForge upload
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: python3 scripts/verify_release.py --artifact-dir dist --tag "$RELEASE_TAG" --commit "$GITHUB_SHA" --repo "$GITHUB_REPOSITORY"
+      - name: Upload verified package to CurseForge
+        env:
+          CF_API_TOKEN: ${{ secrets.CF_API_TOKEN }}
+          CF_PROJECT_ID: ${{ vars.CURSEFORGE_PROJECT_ID }}
+          CF_GAME_VERSION_ID: ${{ vars.CURSEFORGE_GAME_VERSION_ID }}
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          if [[ "$GITHUB_RUN_ATTEMPT" != 1 ]]; then
+            echo 'CurseForge re-run refused. Check the dashboard for an accepted upload before a controlled retry.' >&2
+            exit 1
+          fi
+          python3 scripts/publish_curseforge.py --artifact-dir dist --project-id "$CF_PROJECT_ID" --game-version-id "$CF_GAME_VERSION_ID" --tag "$RELEASE_TAG"
+      - name: Retain upload receipt
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: curseforge-upload-receipt
+          path: dist/curseforge-upload.json
+          if-no-files-found: ignore
+          retention-days: 90

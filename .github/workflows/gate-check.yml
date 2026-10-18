@@ -1,0 +1,17 @@
+# Manual check that jobs using the release environment wait for approval.
+# It reads no secrets, checks out nothing, and publishes nothing.
+name: Release approval gate check
+
+on:
+  workflow_dispatch:
+
+permissions: {}
+
+jobs:
+  gate-check:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    environment: release
+    steps:
+      - name: Report approval
+        run: echo "Approved for the release environment by $GITHUB_TRIGGERING_ACTOR; publish jobs will wait the same way."
