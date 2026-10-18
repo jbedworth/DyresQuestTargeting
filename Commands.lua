@@ -1,14 +1,17 @@
 local _, DQT = ...
 
-local USAGE = "Use /dqt, /dqt add [name], /dqt add_exact [name], /dqt remove [name], /dqt reset, /dqt on, "
-    .. "/dqt off, /dqt options, or /dqt debug."
+local USAGE = "Use /dqt (settings), /dqt list, /dqt add [name], /dqt add_exact [name], /dqt remove [name], "
+    .. "/dqt reset, /dqt on, /dqt off, or /dqt debug."
 local UNAVAILABLE = "Dyre's Quest Targeting is unavailable. Check the DQT login message."
 
 -- The first word is the command; add, add_exact, and remove take the rest of
--- the line as a name, as typed. Handlers live in Core and Options.
+-- the line as a name, as typed. Handlers live in Core and Options. /dqt
+-- alone opens the settings, and /dqt list says what the macro targets
+-- (author-approved); options stays as another way to open the settings.
 -- Diagnostics also run when DQT is unavailable, to help explain why.
 local COMMANDS = {
-    [""] = {handler = "ListTargets"},
+    [""] = {handler = "OpenSettings"},
+    list = {handler = "ListTargets"},
     options = {handler = "OpenSettings"},
     add = {handler = "AddSimilar", takesName = true},
     add_exact = {handler = "AddExact", takesName = true},

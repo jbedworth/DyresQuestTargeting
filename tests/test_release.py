@@ -87,8 +87,8 @@ class ReleaseTests(unittest.TestCase):
         checked = builder.validate_archive(path, self.version)
         self.assertEqual(checked, dict(manifest, tag=""))
         notes = " ".join((self.output / "release-notes.md").read_text().split())
-        for text in ("Forever beta 1.60.1", "70338", "the APIs it needs", "! Quest Targets",
-                     "QuestieDB", "`/dqt options`"):
+        for text in ("Forever beta 1.60.1", "70338", "the APIs it needs", "! Target (DQT)",
+                     "QuestieDB", "`/dqt list`"):
             self.assertIn(text, notes)
         with zipfile.ZipFile(path) as archive:
             self.assertEqual(archive.namelist(), ["DyresQuestTargeting/" + name

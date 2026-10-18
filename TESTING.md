@@ -78,9 +78,10 @@ native `python3`.
 
 With `/dqt debug` for details:
 
-1. Login: the banner, "Made the character macro", and "! Quest Targets" in the
-   character tab of the Macros window, with the crosshair icon
-   (`Ability_Hunter_SniperShot`).
+1. Login: the banner, "Made the character macro", and "! Target (DQT)" in the
+   character tab of the Macros window, with the Hunter Marksman icon (file ID
+   132177). A character with the old "! Quest Targets" macro gets "Renamed the
+   character macro" instead, and the macro stays on its action bar button.
 2. Focus a kill quest: the macro lists its mobs, the first objective last.
    Check the objective text Forever gives ("X slain: 0/8" or "0/8 X slain").
 3. Press the macro near a quest mob: it is targeted and gets a skull; a second
@@ -88,7 +89,8 @@ With `/dqt debug` for details:
 4. Only a corpse near: check what `/targetlasttarget [dead]` after
    `/cleartarget` does (the old target may come back and be marked).
 5. A quest NPC (the turn-in, with QuestieDB): the green triangle. A neutral
-   (yellow) NPC: check that `[noharm]` marks it.
+   (yellow) NPC: check that `[noharm]` marks it. With nothing found, the
+   macro gives no "You can't do that right now".
 6. With QuestieDB: an item quest lists the mobs that drop the item; a
    finished quest lists the turn-in NPC. Check that QuestieDB's names match
    Forever's mobs.
@@ -98,14 +100,41 @@ With `/dqt debug` for details:
    combat ends, and nothing is blocked (no "AddOn action blocked" message).
 9. Opener: the dropdown lists your spellbook, every rank up to the one shown;
    pick a rank-1 spell and press the macro on a mob: it casts that rank.
-   Check how Forever's spellbook names ranks (`subName` "Rank N").
+   Check how Forever's spellbook names ranks (`subName` "Rank N"). Only
+   harmful spells of 1 second or less are listed: no heals or buffs, and a
+   spell whose top rank is slower shows only its fast ranks. Check that
+   `castTime` is in milliseconds (an instant spell is 0).
 10. "Mark what the macro finds" off: no `/tm` line.
 11. Delete the macro: the next quest change makes it again.
+18. `/dqt` opens the settings page; in combat it says it opens out of combat
+    and opens nothing. `/dqt list` works in and out of combat.
+17. "Use an account-wide macro" on: "! Target (DQT)" appears in the General
+    (account) tab with the Hunter Marksman icon, chat says the character one
+    is no longer updated, and the account one follows the focused quest. Log
+    in another character: the account macro follows that character's quest.
+    Off again: the character macro is updated again.
 13. Finish an objective in combat: chat says the mob was removed and that the
     macro updates after combat; after combat it is gone from the macro.
 12. With Questie: right-click a quest in Questie's tracker, Focus Quest: the
-    macro follows it, and `/dqt` says "Questie's focus". Focus Objective:
+    macro follows it, and `/dqt list` says "Questie's focus". Focus Objective:
     only that objective's mobs (check that Questie's objective index matches
     the game's). Then focus another quest in the game's quest log: that one
     wins. Unfocus in Questie: the game's focus again. Relog with a Questie
     focus set: Questie's wins.
+14. "Keep Questie's and the game's focus in sync" on: Focus Quest in
+    Questie's tracker moves the game's focus (the map's quest arrow) to it.
+    Focus another quest in the game's quest log: Questie's tracker focuses it
+    and fades the other quests' map icons. Focus Objective: the game focuses
+    its quest and the macro keeps only that objective. Unfocus in Questie:
+    the game's focus clears. No back and forth: `/dqt debug` shows both
+    focuses on one quest. Check this with RestedXP disabled (it sets the
+    game's focus itself).
+15. "Point TomTom at the focused quest" on, with TomTom: turning it on sets
+    the arrow on a mob the macro lists (compare with `/dqt list`); changing the
+    focused quest moves it; Focus Objective points at that objective's
+    mobs; finishing an objective, then the quest, moves it again (the
+    turn-in last). A /reload does not move it.
+16. With Questie, an item quest (The Totem of Infliction: Ghoul Fang has six
+    droppers): `/dqt list` lists the droppers with drop rates, the best last in
+    the macro; `/dqt debug` lists every dropper and its rate, and no
+    "UNUSED" name reaches the macro.

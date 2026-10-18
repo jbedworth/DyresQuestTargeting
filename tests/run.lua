@@ -31,7 +31,8 @@ end
 
 local ADDON = "DyresQuestTargeting"
 local RUNTIME_FILES = {"Commands.lua", "Core.lua", "Quest.lua", "Macro.lua", "Options.lua"}
-local MACRO = "! Quest Targets"
+local MACRO = "! Target (DQT)"
+local OLD_MACRO = "! Quest Targets"
 local ACCOUNT_SLOTS, CHARACTER_SLOTS = 120, 30
 
 -- A secret stands in for the client's opaque values; tests mark them with
@@ -104,6 +105,12 @@ local function fixture(options)
 
     -- Quests: the super-tracked one and each quest's objectives.
     env.C_SuperTrack = {GetSuperTrackedQuestID = function() return state.focus end}
+    -- Setting the focus fires SUPER_TRACKING_CHANGED, here at once.
+    function env.C_SuperTrack.SetSuperTrackedQuestID(questID)
+        state.focusSets = (state.focusSets or 0) + 1
+        state.focus = questID
+        state.emit("SUPER_TRACKING_CHANGED")
+    end
     env.C_QuestLog = {
         GetQuestObjectives = function(id) return state.quests[id] and state.quests[id].objectives end,
         GetLogIndexForQuestID = function(id) if state.quests[id] then return 1 end end,
@@ -149,11 +156,50 @@ local function fixture(options)
         function utils:FocusQuest(questID) char.TrackerFocus = questID return true end
         function utils:FocusObjective(questID, index) char.TrackerFocus = questID .. " " .. index return true end
         function utils:UnFocus() char.TrackerFocus = nil end
+        -- TomTom targets as Questie sets them: the quest's nearest spawn, or a point.
+        state.waypoints = {}
+        function utils.SetQuestTomTomTarget(questID)
+            state.waypoints[#state.waypoints + 1] = "quest " .. questID
+            return true
+        end
+        function utils:SetTomTomTarget(title, zone, x, y)
+            state.waypoints[#state.waypoints + 1] = title .. " " .. zone .. " " .. x .. "," .. y
+        end
         state.questieUtils = utils
+        state.notes = 0
+        local modules = {
+            TrackerUtils = utils,
+            QuestieQuest = {ToggleNotes = function(_, show)
+                equal(show, false)
+                state.notes = state.notes + 1
+            end},
+            -- Questie's quest objects: objectives by index, each with its spawns.
+            QuestieDB = {GetQuest = function(questID)
+                local spawns = options.questie.spawns and options.questie.spawns[questID]
+                local objectives = {}
+                for index, spawn in pairs(spawns or {}) do objectives[index] = {spawnList = spawn} end
+                return {Objectives = objectives}
+            end,
+            -- {rate, source}, as Questie's DropDB answers.
+            GetItemDroprate = function(itemID, npcID)
+                local rates = options.questie.rates and options.questie.rates[itemID]
+                if rates and rates[npcID] then return {rates[npcID], "wowhead"} end
+            end},
+            -- An NPC's spawns here are one point and its distance from you.
+            DistanceUtils = {GetNearestObjective = function(list) return list.spawn, list.zone, list.name end,
+                GetNearestSpawn = function(spawns) return spawns.at, spawns.zone, spawns.far end},
+        }
+        function modules.QuestieDB:GetNPC(npcID)
+            local npc = options.questie.npcs and options.questie.npcs[npcID]
+            return npc and {name = npc.name, spawns = npc}
+        end
         env.QuestieLoader = {ImportModule = function(_, name)
-            equal(name, "TrackerUtils")
-            return utils
+            -- As Questie's loader: an unknown module is an empty table.
+            return modules[name] or {}
         end}
+    end
+    if options.tomtom then
+        env.TomTom = {}
     end
 
     -- Macros: account slots 1-120, character slots from 121, as the client
@@ -171,13 +217,17 @@ local function fixture(options)
         return 0
     end
     env.GetMacroBody = function(index) return allMacros()[index].body end
+    env.GetMacroInfo = function(index)
+        local macro = allMacros()[index]
+        if macro then return macro.name, macro.icon, macro.body end
+    end
     env.GetNumMacros = function() return #state.account, #state.character end
     env.CreateMacro = function(name, icon, body, perCharacter)
         if state.combat then error("CreateMacro in combat") end
-        equal(perCharacter, true, "the macro is per character")
         equal(#name <= 16, true, "macro names hold at most 16 letters")
         equal(#body <= 255, true, "macro bodies hold at most 255 letters")
-        state.character[#state.character + 1] = {name = name, icon = icon, body = body}
+        local list = perCharacter and state.character or state.account
+        list[#list + 1] = {name = name, icon = icon, body = body}
         state.writes = state.writes + 1
     end
     env.EditMacro = function(index, name, icon, body)
@@ -189,6 +239,11 @@ local function fixture(options)
     end
     function state.macro()
         for _, macro in ipairs(state.character) do
+            if macro.name == MACRO then return macro.body end
+        end
+    end
+    function state.accountMacro()
+        for _, macro in ipairs(state.account) do
             if macro.name == MACRO then return macro.body end
         end
     end
@@ -206,10 +261,15 @@ local function fixture(options)
         end
         env.Settings = {
             VarType = {Boolean = "boolean", Number = "number", String = "string"},
+            -- Returns the category and its layout, as the client does.
             RegisterVerticalLayoutCategory = function(name)
                 local category = {name = name, initializers = {}}
                 function category:GetID() return "id:" .. name end
-                return category
+                local layout = {}
+                function layout:AddInitializer(object)
+                    category.initializers[#category.initializers + 1] = object
+                end
+                return category, layout
             end,
             RegisterProxySetting = function(category, variable, variableType, name, default, getValue, setValue)
                 equal(state.settings[variable], nil, "setting variables are unique")
@@ -231,6 +291,10 @@ local function fixture(options)
             end,
             OpenToCategory = function(id) state.opened = id end,
         }
+    end
+
+    if not options.noSettings and not options.noSectionHeaders then
+        env.CreateSettingsListSectionHeaderInitializer = function(name) return {header = name} end
     end
 
     env.CreateFrame = function(kind)
@@ -316,7 +380,8 @@ test("kill objectives become /targetexact lines, the first objective last", func
     equal(body[2], "/targetexact Tarantula")
     equal(body[3], "/targetexact Dire Condor")
     equal(body[4], "/targetlasttarget [dead]")
-    equal(body[5], "/tm [harm,nodead] !8; [noharm,nodead] !4")
+    equal(body[5], "/tm [harm,nodead] !8; [exists,noharm,nodead] !4",
+        "the NPC clause needs a target: with none, noharm is true")
     equal(body[6], nil, "no opener by default")
 end)
 
@@ -356,7 +421,7 @@ test("Questie's tracker focus counts, and wins at login", function()
     local state = fixture({quests = TWO_QUESTS, focus = 1, questie = {focus = 2}})
     contains(state.macro(), "/targetexact Wolf")
     lacks(state.macro(), "Boar")
-    state.slash("")
+    state.slash("list")
     equal(state.said("Focused quest: Wolves (Questie's focus)"), true)
     local gameOnly = fixture({quests = TWO_QUESTS, focus = 1, questie = {}})
     contains(gameOnly.macro(), "/targetexact Boar", "with no Questie focus, the game's")
@@ -423,6 +488,20 @@ test("a new focused quest is announced with what the macro now looks for first",
     equal(state.last(), "DQT: No focused quest; targeting nothing.")
 end)
 
+test("the announcement names the quest's own first mob, and the hit list apart", function()
+    local state = fixture({quests = THREE_QUESTS, focus = 1, questie = {}})
+    state.slash("add Skeletal Mage")
+    state.focus = 3
+    state.emit("SUPER_TRACKING_CHANGED")
+    state.advance()
+    equal(state.last(), "DQT: Focused quest changed via Quest Focus (Kobolds), targeting updated to Kobold. "
+        .. "Your hit list comes first: Skeletal Mage.")
+    state.focus = nil
+    state.emit("SUPER_TRACKING_CHANGED")
+    state.advance()
+    equal(state.last(), "DQT: No focused quest; targeting updated to Skeletal Mage.")
+end)
+
 test("a finished objective's names leave the macro, with a word in chat", function()
     local quest = {title = "Assessing the Threat", objectives = {objective("9/10 Redridge Mongrel slain"),
         objective("0/6 Redridge Poacher slain")}}
@@ -462,13 +541,147 @@ test("turning off Follow Questie's tracker focus leaves only the game's", functi
     contains(state.macro(), "/targetexact Wolf")
 end)
 
+test("syncing the two focuses is off by default", function()
+    local state = fixture({quests = THREE_QUESTS, focus = 1, questie = {}})
+    state.questieUtils:FocusQuest(2)
+    state.advance()
+    equal(state.focus, 1, "the game's focus stays")
+    state.focus = 3
+    state.emit("SUPER_TRACKING_CHANGED")
+    state.advance()
+    equal(state.env.Questie.db.char.TrackerFocus, 2, "Questie's focus stays")
+end)
+
+test("with sync on, a Questie focus sets the game's, and the game's sets Questie's", function()
+    local state = fixture({quests = THREE_QUESTS, focus = 1, questie = {}, saved = {syncFocus = true}})
+    state.questieUtils:FocusQuest(2)
+    state.advance()
+    equal(state.focus, 2, "the game focuses Questie's quest")
+    contains(state.macro(), "/targetexact Wolf")
+    equal(state.notes, 0)
+    state.focus = 3
+    state.emit("SUPER_TRACKING_CHANGED")
+    state.advance()
+    equal(state.env.Questie.db.char.TrackerFocus, 3, "Questie focuses the game's quest")
+    equal(state.notes, 1, "Questie's map icons follow, as its menu does")
+    contains(state.macro(), "/targetexact Kobold")
+    state.advance(5)
+    equal(state.focus, 3, "no back and forth")
+    equal(state.env.Questie.db.char.TrackerFocus, 3)
+end)
+
+test("with sync on, a Questie objective focus gives the game its quest and stays an objective focus", function()
+    local state = fixture({quests = TWO_QUESTS, focus = 1, questie = {}, saved = {syncFocus = true}})
+    state.questieUtils:FocusObjective(2, 2)
+    state.advance()
+    equal(state.focus, 2)
+    equal(state.env.Questie.db.char.TrackerFocus, "2 2")
+    contains(state.macro(), "/targetexact Bear")
+    lacks(state.macro(), "Wolf")
+end)
+
+test("with sync on, unfocusing in Questie clears the game's focus on the same quest", function()
+    local state = fixture({quests = TWO_QUESTS, focus = 1, questie = {}, saved = {syncFocus = true}})
+    state.questieUtils:FocusQuest(2)
+    state.advance()
+    state.questieUtils:UnFocus()
+    state.advance()
+    equal(state.focus, 0, "cleared, as Blizzard clears it")
+    state.advance()
+    contains(state.macro(), "nothing to target", "the next rebuild follows")
+end)
+
+test("sync does nothing while Follow Questie's tracker focus is off, or without Questie", function()
+    local state = fixture({quests = TWO_QUESTS, focus = 1, questie = {focus = 2},
+        saved = {syncFocus = true, questieFocus = false}})
+    state.questieUtils:FocusQuest(2)
+    state.advance()
+    equal(state.focus, 1)
+    local bare = fixture({quests = THREE_QUESTS, focus = 1, saved = {syncFocus = true}})
+    bare.focus = 3
+    bare.emit("SUPER_TRACKING_CHANGED")
+    bare.advance()
+    contains(bare.macro(), "/targetexact Kobold")
+    equal(bare.focusSets, nil, "the game's focus is left alone")
+end)
+
+test("the Questie settings sit under an experimental section heading", function()
+    local state = fixture()
+    local list = state.registered.initializers
+    local heading
+    for index, object in ipairs(list) do
+        if object.header then heading = index end
+    end
+    equal(list[heading].header, "Questie Synchronization (Experimental)")
+    equal(list[heading + 1].setting.variable, "DQT_SYNC_FOCUS")
+    equal(list[heading + 2].setting.variable, "DQT_TOMTOM")
+    contains(list[heading + 1].setting.name, "(experimental)")
+    contains(list[heading + 2].tooltip, "Use with caution.")
+    local bare = fixture({noSectionHeaders = true})
+    equal(bare.settings.DQT_SYNC_FOCUS.name, "Keep Questie's and the game's focus in sync (experimental)",
+        "without headings, the settings are still there")
+end)
+
+local SPAWNS = {[2] = {[2] = {spawn = {40, 60}, zone = 12, name = "Bear"}}}
+
+test("TomTom is off by default, and not pointed at login", function()
+    local state = fixture({quests = TWO_QUESTS, focus = 1, questie = {}, tomtom = true})
+    state.focus = 2
+    state.emit("SUPER_TRACKING_CHANGED")
+    state.advance()
+    equal(#state.waypoints, 0, "off")
+    local on = fixture({quests = TWO_QUESTS, focus = 1, questie = {}, tomtom = true, saved = {tomtom = true}})
+    equal(#on.waypoints, 0, "a waypoint of your own stays at login")
+end)
+
+test("TomTom points at the focused quest, its objective, and again as objectives finish", function()
+    local quests = {[1] = TWO_QUESTS[1], [2] = {title = "Wolves", objectives = {
+        objective("Wolf slain: 0/5"), objective("Bear slain: 0/2")}}}
+    local state = fixture({quests = quests, focus = 1, questie = {spawns = SPAWNS}, tomtom = true})
+    state.settings.DQT_TOMTOM:SetValue(true)
+    equal(state.waypoints[1], "quest 1", "turning it on points now")
+    state.focus = 2
+    state.emit("SUPER_TRACKING_CHANGED")
+    state.advance()
+    equal(state.waypoints[2], "quest 2")
+    state.emit("QUEST_LOG_UPDATE")
+    state.advance()
+    equal(#state.waypoints, 2, "no change, no new waypoint")
+    state.questieUtils:FocusObjective(2, 2)
+    state.advance()
+    equal(state.waypoints[3], "Bear 12 40,60", "an objective focus points at that objective")
+    quests[2].objectives[2] = objective("Bear slain: 2/2", "monster", true)
+    state.emit("QUEST_LOG_UPDATE")
+    state.advance()
+    equal(state.waypoints[4], "quest 2", "its objective done: the quest's nearest objective")
+    quests[2].complete = true
+    quests[2].objectives[1] = objective("Wolf slain: 5/5", "monster", true)
+    state.emit("QUEST_LOG_UPDATE")
+    state.advance()
+    equal(state.waypoints[5], "quest 2", "complete: Questie points at the turn-in")
+end)
+
+test("TomTom is left alone without TomTom or Questie", function()
+    local state = fixture({quests = TWO_QUESTS, focus = 1, questie = {}, saved = {tomtom = true}})
+    state.focus = 2
+    state.emit("SUPER_TRACKING_CHANGED")
+    state.advance()
+    equal(#state.waypoints, 0, "no TomTom")
+    local bare = fixture({quests = TWO_QUESTS, focus = 1, tomtom = true, saved = {tomtom = true}})
+    bare.settings.DQT_TOMTOM:SetValue(true)
+    bare.focus = 2
+    bare.emit("SUPER_TRACKING_CHANGED")
+    bare.advance()
+    contains(bare.macro(), "/targetexact Wolf", "no Questie: the macro still works")
+end)
+
 test("Questie's objective focus targets that objective only", function()
     local state = fixture({quests = TWO_QUESTS, questie = {}})
     state.questieUtils:FocusObjective(2, 2)
     state.advance()
     contains(state.macro(), "/targetexact Bear")
     lacks(state.macro(), "Wolf")
-    state.slash("")
+    state.slash("list")
     equal(state.said("Focused quest: Wolves (Questie's focus, objective 2)"), true)
 end)
 
@@ -504,13 +717,61 @@ test("with QuestieDB, item objectives target the mobs that drop the item", funct
     local state = fixture({db = DB, focus = 101, quests = {[101] = {title = "Silk", objectives = {
         objective("Dire Condor slain: 0/8"), objective("Tarantula Silk: 0/6", "item")}}}})
     local body = state.macro()
-    contains(body, "/targetexact Tarantula\n/targetexact Giant Tarantula\n/targetexact Cave Tarantula\n"
-        .. "/targetexact Dire Condor\n")
-    lacks(body, "Venomous", "at most three mobs per item")
+    contains(body, "/targetexact Venomous Tarantula\n/targetexact Cave Tarantula\n/targetexact Giant Tarantula\n"
+        .. "/targetexact Tarantula\n/targetexact Dire Condor\n",
+        "without drop rates, QuestieDB's order, its first dropper last (most wanted)")
     state.clear()
-    state.slash("")
+    state.slash("list")
     equal(state.said("Dire Condor (kill objective"), true)
     equal(state.said("Tarantula (drops a quest item: Tarantula Silk)"), true)
+    state.slash("debug")
+    equal(state.said("dropped by Tarantula, Giant Tarantula, Cave Tarantula, Venomous Tarantula "
+        .. "(4; the macro uses the best 6)"), true, "debug lists every dropper")
+end)
+
+local SILK = {[101] = {title = "Silk", objectives = {objective("Tarantula Silk: 0/6", "item")}}}
+
+test("with Questie's drop rates, the best droppers come first, and /dqt shows the rates", function()
+    local state = fixture({db = DB, focus = 101, quests = SILK,
+        questie = {rates = {[50] = {[20] = 4, [21] = 30.25, [22] = -12, [23] = 18}}}})
+    contains(state.macro(), "/cleartarget\n/targetexact Tarantula\n/targetexact Cave Tarantula\n"
+        .. "/targetexact Venomous Tarantula\n/targetexact Giant Tarantula\n", "the best rate last, so it wins")
+    state.clear()
+    state.slash("list")
+    equal(state.said("Giant Tarantula (drops a quest item: Tarantula Silk, 30.3% drop rate)"), true)
+    state.slash("debug")
+    equal(state.said("dropped by Giant Tarantula 30.3%, Venomous Tarantula 18.0%, Cave Tarantula 12.0%, "
+        .. "Tarantula 4.0%"), true, "debug lists droppers best first")
+end)
+
+test("droppers past six are left out, worst first, and UNUSED placeholders never count", function()
+    local db = {quests = {[101] = {objectives = {nil, nil, {{60, nil, 6}}}}},
+        npcs = {[1] = "Ghoul A", [2] = "Ghoul B", [3] = "Ghoul C", [4] = "Ghoul D", [5] = "Ghoul E",
+            [6] = "Ghoul F", [7] = "Ghoul G", [8] = "Shambling Skeleton UNUSED"},
+        items = {[60] = {name = "Ghoul Fang", drops = {8, 1, 2, 3, 4, 5, 6, 7}}}}
+    local state = fixture({db = db, focus = 101, quests = {[101] = {title = "Fangs", objectives = {
+        objective("0/10 Ghoul Fang", "item")}}},
+        questie = {rates = {[60] = {[1] = 1, [2] = 2, [3] = 3, [4] = 4, [5] = 5, [6] = 6, [7] = 7, [8] = 99}}}})
+    local body = state.macro()
+    lacks(body, "UNUSED")
+    lacks(body, "Ghoul A", "the seventh best is left out")
+    contains(body, "/targetexact Ghoul B\n/targetexact Ghoul C\n/targetexact Ghoul D\n/targetexact Ghoul E\n"
+        .. "/targetexact Ghoul F\n/targetexact Ghoul G\n")
+end)
+
+test("TomTom points at the nearest spawn of a mob the macro lists", function()
+    local state = fixture({db = DB, focus = 101, quests = SILK, tomtom = true, saved = {tomtom = true},
+        questie = {rates = {[50] = {[20] = 4, [21] = 30, [22] = 12, [23] = 18}},
+            npcs = {[20] = {name = "Tarantula", at = {10, 10}, zone = 40, far = 50},
+                [22] = {name = "Cave Tarantula", at = {20, 30}, zone = 40, far = 5},
+                [21] = {name = "Giant Tarantula", at = {70, 80}, zone = 40, far = 90}}}})
+    state.settings.DQT_TOMTOM:SetValue(true)
+    equal(state.waypoints[#state.waypoints], "Cave Tarantula 40 20,30", "the nearest of the macro's mobs")
+    SILK[101].complete = true
+    state.emit("QUEST_LOG_UPDATE")
+    state.advance()
+    equal(state.waypoints[#state.waypoints], "quest 101", "complete: Questie points at the turn-in")
+    SILK[101].complete = nil
 end)
 
 test("with QuestieDB, a shared kill objective targets each of its mobs", function()
@@ -529,7 +790,7 @@ test("a quest ready to turn in targets its turn-in NPC, with QuestieDB only", fu
     contains(state.macro(), "/cleartarget\n/targetexact Guard Parker\n")
     local bare = fixture({focus = 101, quests = quests})
     contains(bare.macro(), "nothing to target")
-    bare.slash("")
+    bare.slash("list")
     equal(bare.said("QuestieDB is not loaded"), true)
 end)
 
@@ -554,7 +815,7 @@ test("when the macro is full, the least important names are left out", function(
     lacks(body, "Number 12", "the last objective is left out")
     contains(body, "/targetlasttarget [dead]")
     state.clear()
-    state.slash("")
+    state.slash("list")
     equal(state.said("No room in the macro for Very Long Named Creature Number 12"), true)
 end)
 
@@ -719,12 +980,26 @@ local SPELLBOOK = {
     {name = "Balance", offset = 3, items = {
         {name = "Moonfire", subName = "Rank 3", itemType = 1},
         {name = "Wrath", subName = "Rank 1", itemType = 1},
+        {name = "Entangling Roots", subName = "Rank 1", itemType = 1},
+        {name = "Mark of the Wild", subName = "Rank 1", itemType = 1},
         {name = "Hidden Flyout", subName = "", itemType = 2},
     }},
-    {name = "Guild", offset = 6, isGuild = true, items = {{name = "Guild Perk", subName = "", itemType = 1}}},
+    {name = "Guild", offset = 8, isGuild = true, items = {{name = "Guild Perk", subName = "", itemType = 1}}},
 }
 
-local function spellbookGlobals()
+-- C_Spell's answers by "Name(Rank N)": harmful, and the cast time in ms.
+local SPELL_INFO = {
+    ["Auto Shot"] = {harmful = true, castTime = 0},
+    ["Attack"] = {harmful = true, castTime = 0},
+    ["Moonfire(Rank 1)"] = {harmful = true, castTime = 0},
+    ["Moonfire(Rank 2)"] = {harmful = true, castTime = 0},
+    ["Moonfire(Rank 3)"] = {harmful = true, castTime = 0},
+    ["Wrath(Rank 1)"] = {harmful = true, castTime = 1500},
+    ["Entangling Roots(Rank 1)"] = {harmful = true, castTime = 1000},
+    ["Mark of the Wild(Rank 1)"] = {harmful = false, castTime = 0},
+}
+
+local function spellbookGlobals(noSpellInfo)
     local function item(slot)
         for _, line in ipairs(SPELLBOOK) do
             local entry = line.items[slot - line.offset]
@@ -747,6 +1022,13 @@ local function spellbookGlobals()
                     isPassive = entry.isPassive == true, isOffSpec = false}
             end,
         },
+        C_Spell = not noSpellInfo and {
+            IsSpellHarmful = function(name) return SPELL_INFO[name] ~= nil and SPELL_INFO[name].harmful end,
+            GetSpellInfo = function(name)
+                local info = SPELL_INFO[name]
+                return info and {name = name, castTime = info.castTime}
+            end,
+        } or nil,
     }
 end
 
@@ -757,7 +1039,8 @@ test("the opener lists every spellbook spell and rank, and casts the one picked"
     local labels = {}
     for _, choice in ipairs(opener.options()) do labels[#labels + 1] = choice.label end
     equal(table.concat(labels, ","), "Nothing,Start attacking (/startattack),Attack,Auto Shot,"
-        .. "Moonfire(Rank 1),Moonfire(Rank 2),Moonfire(Rank 3),Wrath(Rank 1)")
+        .. "Entangling Roots(Rank 1),Moonfire(Rank 1),Moonfire(Rank 2),Moonfire(Rank 3)",
+        "harmful spells of 1 second or less only: no Wrath (1.5 s), no Mark of the Wild (helpful)")
     opener.setting:SetValue("Moonfire(Rank 1)")
     local body = lines(state.macro())
     equal(body[#body], "/cast [harm,nodead] Moonfire(Rank 1)")
@@ -769,6 +1052,14 @@ test("the opener lists every spellbook spell and rank, and casts the one picked"
     opener.setting:SetValue("")
     lacks(state.macro(), "/startattack")
     lacks(state.macro(), "/cast")
+end)
+
+test("without the spell info API, the opener lists every spell, as before", function()
+    local state = fixture({globals = spellbookGlobals(true)})
+    local labels = {}
+    for _, choice in ipairs(state.registered.initializers[6].options()) do labels[#labels + 1] = choice.label end
+    contains(table.concat(labels, ","), "Wrath(Rank 1)")
+    contains(table.concat(labels, ","), "Mark of the Wild(Rank 1)")
 end)
 
 test("a spell picked earlier stays in the list after the spellbook loses it", function()
@@ -790,18 +1081,76 @@ test("/dqt off leaves the macro as it is; /dqt on rebuilds it", function()
     state.emit("SUPER_TRACKING_CHANGED")
     state.advance()
     equal(state.macro(), before)
-    state.slash("")
+    state.slash("list")
     contains(state.last(), "Off:")
     state.slash("on")
     contains(state.macro(), "/tar Wolf")
     lacks(state.macro(), "Condor")
 end)
 
+test("the macro uses the Hunter Marksman icon", function()
+    local state = fixture()
+    equal(state.character[1].name, MACRO)
+    equal(state.character[1].icon, 132177)
+end)
+
+test("a character macro with the old name is renamed in place, not made again", function()
+    local state = fixture({characterMacros = {{name = "mine", body = "/say hi"},
+        {name = OLD_MACRO, icon = "Ability_Hunter_SniperShot", body = "/say old"}}, quests = CONDOR_QUEST, focus = 101})
+    equal(#state.character, 2, "no second macro")
+    equal(state.character[2].name, MACRO)
+    equal(state.character[2].icon, 132177)
+    contains(state.macro(), "/targetexact Dire Condor")
+    equal(state.character[1].body, "/say hi")
+    equal(state.said("Renamed the character macro"), true)
+    equal(state.said("Made the character macro"), false)
+end)
+
+test("an account macro with the old name is left alone", function()
+    local state = fixture({accountMacros = {{name = OLD_MACRO, body = "/say mine"}}})
+    equal(state.account[1].name, OLD_MACRO)
+    equal(state.account[1].body, "/say mine")
+    contains(state.macro(), "nothing to target")
+end)
+
 test("an account macro of the same name is left alone, with a warning", function()
     local state = fixture({accountMacros = {{name = MACRO, body = "/say mine"}}, quests = CONDOR_QUEST, focus = 101})
     equal(state.account[1].body, "/say mine")
-    equal(state.said("An account-wide macro is named"), true)
-    equal(state.macro(), nil, "no character macro of that name either")
+    contains(state.macro(), "/targetexact Dire Condor", "the character macro is made and kept up to date")
+    equal(state.said("The account-wide macro \"" .. MACRO .. "\" is not updated now"), true)
+end)
+
+test("the macro is a character macro by default", function()
+    local state = fixture({quests = CONDOR_QUEST, focus = 101})
+    equal(state.dqt.db.accountMacro, false)
+    contains(state.macro(), "/targetexact Dire Condor")
+    equal(state.accountMacro(), nil)
+    equal(state.settings.DQT_ACCOUNT_MACRO.default, false)
+end)
+
+test("Use an account-wide macro makes and updates one account macro, and leaves the character one", function()
+    local state = fixture({quests = CONDOR_QUEST, focus = 101})
+    local before = state.macro()
+    state.settings.DQT_ACCOUNT_MACRO:SetValue(true)
+    contains(state.accountMacro(), "/targetexact Dire Condor")
+    equal(state.account[1].icon, 132177)
+    equal(state.said("Made the account-wide macro"), true)
+    equal(state.said("The character macro \"" .. MACRO .. "\" is not updated now"), true)
+    state.slash("add Wolf")
+    contains(state.accountMacro(), "/tar Wolf")
+    equal(state.macro(), before, "the character macro is left as it was")
+    state.slash("debug")
+    equal(state.said("debug macro account-wide index=1"), true)
+    state.settings.DQT_ACCOUNT_MACRO:SetValue(false)
+    contains(state.macro(), "/tar Wolf", "switched back: the character macro again")
+end)
+
+test("with no free account macro slot, DQT says so", function()
+    local full = {}
+    for index = 1, ACCOUNT_SLOTS do full[index] = {name = "a" .. index, body = ""} end
+    local state = fixture({accountMacros = full, saved = {accountMacro = true}})
+    equal(state.said("No free account-wide macro slot"), true)
+    equal(state.accountMacro(), nil)
 end)
 
 test("with no free character slot, DQT says so once", function()
@@ -828,11 +1177,25 @@ end)
 test("bad commands show the usage; commands are not case sensitive", function()
     local state = fixture()
     state.slash("frobnicate")
-    contains(state.last(), "Use /dqt, /dqt add [name]")
+    contains(state.last(), "Use /dqt (settings), /dqt list, /dqt add [name]")
     state.slash("on please")
     contains(state.last(), "Use /dqt")
     state.slash("OPTIONS")
     equal(state.opened, "id:Dyre's Quest Targeting")
+end)
+
+test("/dqt alone opens the settings, out of combat only; /dqt list lists", function()
+    local state = fixture({quests = CONDOR_QUEST, focus = 101})
+    state.slash("")
+    equal(state.opened, "id:Dyre's Quest Targeting")
+    state.opened = nil
+    state.combat = true
+    state.slash("")
+    equal(state.opened, nil, "no panel in combat")
+    contains(state.last(), "The settings open out of combat.")
+    state.slash("list")
+    equal(state.said("The macro looks for, most wanted first:"), true, "the list works in combat")
+    state.combat = false
 end)
 
 test("a clash on /dqt is reported, with the backup command", function()

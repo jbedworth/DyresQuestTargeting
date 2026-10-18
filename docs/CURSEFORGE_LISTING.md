@@ -20,7 +20,7 @@ tested.
 
 ## Summary
 
-A targeting macro, "! Quest Targets", that follows your focused quest in World of Warcraft: Forever: one key finds and marks the mobs and NPCs the quest needs.
+A targeting macro, "! Target (DQT)", that follows your focused quest in World of Warcraft: Forever: one key finds and marks the mobs and NPCs the quest needs.
 
 ## Description
 
@@ -31,7 +31,7 @@ Per-file changelogs need no manual text: each CI upload uses the version's
 `CHANGELOG.md` section, through `release-notes.md`.
 
 ```markdown
-**Dyre's Quest Targeting** keeps one character macro, **! Quest Targets**, up to date with the mobs and NPCs your focused quest needs. Put it on a bar and press it to find, target, and mark the nearest one.
+**Dyre's Quest Targeting** keeps one character macro, **! Target (DQT)**, up to date with the mobs and NPCs your focused quest needs. Put it on a bar and press it to find, target, and mark the nearest one.
 
 ### What it targets
 - The mobs your focused quest still needs killed.
@@ -40,18 +40,20 @@ Per-file changelogs need no manual text: each CI upload uses the version's
 
 ### What it does when it finds one
 - Skips a dead one, and marks the mob with a skull or the NPC with a green triangle (both can be changed or turned off).
-- Optionally starts attacking, or casts a spell you pick from your spellbook, such as a low rank you tag mobs with.
+- Optionally starts attacking, or casts a spell you pick from your spellbook (harmful, 1 second or less), such as a low rank you tag mobs with.
 
 ### Per character
-Each character has its own macro and its own hit list.
+Each character has its own macro and its own hit list. Short of character macro slots? A setting uses one account-wide macro instead.
 
 ### Questie optional
 It follows the quest you focus in the game's quest log, or in Questie's tracker if you use Questie. Without Questie it still targets kill objectives and your hit list.
 
+With Questie, two optional settings, experimental and to be used with caution: keep Questie's and the game's quest focus in sync, and point the TomTom arrow at the nearest of the mobs the macro looks for.
+
 ### Commands
-- `/dqt` lists what the macro targets and why.
+- `/dqt` opens the settings; `/dqt list` lists what the macro targets, most wanted first, and why.
 - `/dqt add [name]`, `/dqt add_exact [name]`, `/dqt remove [name]`, `/dqt reset`.
-- `/dqt on`, `/dqt off`, `/dqt options`.
+- `/dqt on`, `/dqt off`.
 - `/questtargeting` works the same, in case another AddOn uses `/dqt`.
 
 ### Compatibility

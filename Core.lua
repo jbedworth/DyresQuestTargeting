@@ -1,11 +1,11 @@
 local addonName, DQT = ...
 
--- Dyre's Quest Targeting: keeps the character macro "! Quest Targets" up to
+-- Dyre's Quest Targeting: keeps the macro "! Target (DQT)" up to
 -- date with the mobs and NPCs your focused quest needs, plus names you add.
 -- This file owns saved settings, the login banner, install and API checks,
 -- slash conflict reporting, the hit list, refresh scheduling, and startup.
 local DEFAULT_TITLE = "Dyre's Quest Targeting"
-local READY_MESSAGE = "  Ready. Put the \"! Quest Targets\" macro on a bar; /dqt lists what it targets."
+local READY_MESSAGE = "  Ready. Put the \"! Target (DQT)\" macro on a bar; /dqt list shows what it targets, /dqt opens the settings."
 local SLASH_KEY = "DYRESQUESTTARGETING"
 local PRIMARY_SLASH = "/dqt"
 local BACKUP_SLASH = "/questtargeting"
@@ -66,14 +66,14 @@ end
 -- Functions other runtime files must define. A mixed install of old and new
 -- files otherwise fails silently, because the client hides Lua errors by default.
 local REQUIRED_NAMESPACE = {"ParseCommand", "HandleCommand", "FocusedQuest", "GameFocusChanged", "WorldLoading",
-    "WorldEntered", "HookQuestieFocus",
+    "WorldEntered", "HookQuestieFocus", "SyncFocus", "PointTomTom",
     "ReportQuestDebug", "BuildMacro",
     "WriteMacro", "FlushMacro", "ReportMacroDebug", "InitializeOptions", "OpenSettings"}
 -- Client APIs the macro needs; checked, never the client version.
 local REQUIRED_APIS = {
     {"C_SuperTrack", "GetSuperTrackedQuestID"}, {"C_QuestLog", "GetQuestObjectives"},
     {"C_QuestLog", "GetLogIndexForQuestID"}, {"C_QuestLog", "IsComplete"}, {"C_QuestLog", "GetTitleForQuestID"},
-    {nil, "GetMacroIndexByName"}, {nil, "GetMacroBody"}, {nil, "GetNumMacros"}, {nil, "CreateMacro"},
+    {nil, "GetMacroInfo"}, {nil, "GetMacroBody"}, {nil, "GetNumMacros"}, {nil, "CreateMacro"},
     {nil, "EditMacro"}, {nil, "InCombatLockdown"}, {nil, "UnitExists"}, {nil, "UnitName"},
     {"C_Timer", "After"},
 }
@@ -164,6 +164,16 @@ function DQT.SanitizeDB(db)
     if type(db.questieFocus) ~= "boolean" then
         db.questieFocus = true
     end
+    -- Both change other AddOns' state, so they are opt-in.
+    if type(db.syncFocus) ~= "boolean" then
+        db.syncFocus = false
+    end
+    if type(db.tomtom) ~= "boolean" then
+        db.tomtom = false
+    end
+    if type(db.accountMacro) ~= "boolean" then
+        db.accountMacro = false
+    end
     if type(db.mark) ~= "boolean" then
         db.mark = true
     end
@@ -219,17 +229,28 @@ local function Announce(quest, built)
         end
         return
     end
-    local first = built.kept[#built.kept]
-    local targeting = first and ("targeting updated to " .. first.name) or "targeting nothing"
-    if DQT.MacroPending() then
-        targeting = targeting .. " after combat"
-    end
+    local wait = DQT.MacroPending() and " after combat" or ""
     if not quest then
-        DQT.Report("No focused quest; " .. targeting .. ".")
+        local first = built.kept[#built.kept]
+        DQT.Report("No focused quest; " .. (first and ("targeting updated to " .. first.name) or "targeting nothing")
+            .. wait .. ".")
         return
     end
+    -- The quest's own first mob, so a hit list name (which wins) does not
+    -- hide the change; the hit list is said apart (author-approved).
+    local questFirst, listFirst
+    for index = #built.kept, 1, -1 do
+        local target = built.kept[index]
+        if target.source == "added" then
+            listFirst = listFirst or target
+        else
+            questFirst = questFirst or target
+        end
+    end
+    local targeting = questFirst and ("targeting updated to " .. questFirst.name) or "targeting nothing from the quest"
     local via = quest.via == "Questie" and "Questie" or "Quest Focus"
-    DQT.Report("Focused quest changed via " .. via .. " (" .. quest.title .. "), " .. targeting .. ".")
+    DQT.Report("Focused quest changed via " .. via .. " (" .. quest.title .. "), " .. targeting .. wait .. "."
+        .. (listFirst and (" Your hit list comes first: " .. listFirst.name .. ".") or ""))
 end
 
 -- Rebuilds the macro from the focused quest and the hit list. Out of
@@ -259,6 +280,9 @@ function DQT.Refresh()
     DQT.current = built
     DQT.WriteMacro(built.body)
     Announce(quest, built)
+    -- After the macro, so a change in Questie's private code cannot stop it.
+    DQT.SyncFocus()
+    DQT.PointTomTom(quest, built.kept)
 end
 
 local refreshScheduled = false

@@ -357,7 +357,9 @@ Lua 5.1, runs the suite, builds the archive, retains it as an artifact, and
 publishes the tested bytes through GitHub CLI and the documented CurseForge
 Upload API after approval. CurseForge's Upload API accepts multipart `metadata`
 and `file` fields; metadata includes `gameVersions`, `releaseType`, and
-`changelog`/`changelogType`. Record the returned file ID and distinguish
+`changelog`/`changelogType`, plus `relations`: Questie (project 334372) as an
+optional dependency, so the listing names Questie without requiring it. QuestieDB
+has no CurseForge project and is not listed. Record the returned file ID and distinguish
 successful upload from moderator approval.
 
 BigWigsMods/packager was evaluated as an alternative (reviewed upstream commit

@@ -15,12 +15,42 @@ local MARKERS = {
     [0] = "None", "Star", "Circle", "Diamond", "Triangle (green)", "Moon", "Square", "Cross", "Skull",
 }
 
-local category
+local category, layout
+
+-- "On a mob, also" lists only harmful spells (C_Spell.IsSpellHarmful: "can be
+-- cast on hostile targets") that cast in this long or less (author-approved);
+-- SpellInfo.castTime is in milliseconds, 0 for instant. Checked per rank, as
+-- "Name(Rank N)": a low rank often casts faster than the top one.
+local MAX_OPENER_CAST_MS = 1000
+-- Shown in both Questie settings' tooltips, under their own section heading.
+local EXPERIMENTAL = " Experimental: it uses Questie's own code, not a public API. Use with caution."
+local QUESTIE_HEADING = "Questie Synchronization (Experimental)"
+
+-- Harmful and fast enough to open with. Without the spell APIs, every spell
+-- counts, as before; a value that may be secret never counts.
+local function IsOpenerSpell(name)
+    local spell = C_Spell
+    if type(spell) ~= "table" or type(spell.IsSpellHarmful) ~= "function"
+            or type(spell.GetSpellInfo) ~= "function" then
+        return true
+    end
+    local harmful = spell.IsSpellHarmful(name)
+    if DQT.IsSecret(harmful) or harmful ~= true then
+        return false
+    end
+    local info = spell.GetSpellInfo(name)
+    if DQT.IsSecret(info) or type(info) ~= "table" then
+        return false
+    end
+    local castTime = info.castTime
+    return not DQT.IsSecret(castTime) and type(castTime) == "number" and castTime <= MAX_OPENER_CAST_MS
+end
 
 -- Your spellbook's active spells, as the macro casts them: "Name(Rank N)",
 -- each rank up to the one the spellbook shows (it may list only the highest),
--- or "Name" for a spell without ranks. The spellbook APIs return no secrets
--- (SpellBookDocumentation.lua); read when the dropdown opens.
+-- or "Name" for a spell without ranks; only openers (IsOpenerSpell). The
+-- spellbook APIs return no secrets (SpellBookDocumentation.lua); read when
+-- the dropdown opens.
 local function SpellbookSpells()
     local spells, seen = {}, {}
     local book = C_SpellBook
@@ -32,7 +62,7 @@ local function SpellbookSpells()
     end
     local function Add(name)
         name = DQT.CheckOpener(name)
-        if name and name ~= "" and name ~= DQT.OPENER_ATTACK and not seen[name] then
+        if name and name ~= "" and name ~= DQT.OPENER_ATTACK and not seen[name] and IsOpenerSpell(name) then
             seen[name] = true
             spells[#spells + 1] = name
         end
@@ -128,9 +158,9 @@ function DQT.InitializeOptions()
     if not HasSettingsAPI() then
         return
     end
-    category = Settings.RegisterVerticalLayoutCategory(TITLE)
+    category, layout = Settings.RegisterVerticalLayoutCategory(TITLE)
     Flag("DQT_ENABLED", "Keep the macro up to date", "enabled", true,
-        "Rewrite the character macro \"" .. DQT.MACRO_NAME .. "\" with the mobs and NPCs your focused quest "
+        "Rewrite the macro \"" .. DQT.MACRO_NAME .. "\" with the mobs and NPCs your focused quest "
             .. "needs, out of combat. Off leaves the macro as it is. /dqt on and /dqt off do the same.")
     Flag("DQT_QUESTIE_FOCUS", "Follow Questie's tracker focus", "questieFocus", true,
         "With Questie installed, also follow the quest (or objective) you focus in Questie's tracker; "
@@ -153,13 +183,48 @@ function DQT.InitializeOptions()
         end)
     Settings.CreateDropdown(category, opener, OpenerChoices,
         "What the macro does to a mob it finds: nothing, start attacking, or cast one of your spells, such as "
-            .. "a low rank you tag mobs with. Never on an NPC.")
+            .. "a low rank you tag mobs with. Only harmful spells with a cast time of 1 second or less are "
+            .. "listed. Never on an NPC.")
+    Flag("DQT_ACCOUNT_MACRO", "Use an account-wide macro", "accountMacro", false,
+        "Off (the default): each character has its own macro, in its character macro slots. On: one "
+            .. "account-wide macro, for when character slots run short; DQT rewrites it for whichever character "
+            .. "is logged in. Not for playing two characters at once: they would rewrite it in turn. After "
+            .. "switching, put the new macro on your bars and delete the old one.")
+    -- A section heading, as Blizzard's Controls page adds them
+    -- (Blizzard_SettingControls.lua); without it the names still say experimental.
+    if type(CreateSettingsListSectionHeaderInitializer) == "function" and type(layout) == "table"
+            and type(layout.AddInitializer) == "function" then
+        layout:AddInitializer(CreateSettingsListSectionHeaderInitializer(QUESTIE_HEADING))
+    end
+    Flag("DQT_SYNC_FOCUS", "Keep Questie's and the game's focus in sync (experimental)", "syncFocus", false,
+        "With Questie installed: focusing a quest in Questie's tracker also focuses it in the game's quest "
+            .. "log and map, and the other way round. A Questie objective focus gives the game its quest. "
+            .. "Needs \"Follow Questie's tracker focus\"." .. EXPERIMENTAL)
+    local tomtom = Proxy("DQT_TOMTOM", Settings.VarType.Boolean, "Point TomTom at the focused quest (experimental)", false,
+        function() return DQT.db.tomtom end,
+        function(value)
+            DQT.db.tomtom = value == true
+            DQT.Refresh()
+            if DQT.db.tomtom and DQT.current then
+                DQT.PointTomTom(DQT.current.quest, DQT.current.kept, true)
+            end
+        end)
+    Settings.CreateCheckbox(category, tomtom,
+        "With Questie and TomTom installed: points the TomTom arrow at the nearest of the quest mobs "
+            .. "the macro looks for (the best droppers, for a quest item), or at the turn-in once the quest is "
+            .. "done. It moves when the focused quest or objective changes, an objective is done, or the quest "
+            .. "is ready to turn in." .. EXPERIMENTAL)
     Settings.RegisterAddOnCategory(category)
 end
 
+-- Never opened in combat (no panels in combat); /dqt list still works then.
 function DQT.OpenSettings()
     if not category then
         DQT.Report(UNAVAILABLE)
+        return
+    end
+    if InCombatLockdown() then
+        DQT.Report("The settings open out of combat. /dqt list shows what the macro targets.")
         return
     end
     Settings.OpenToCategory(category:GetID())

@@ -2,10 +2,10 @@
 
 A targeting macro for World of Warcraft: Forever (beta) that follows the quest
 you are working on. Dyre's Quest Targeting (DQT) keeps one character macro,
-**! Quest Targets**, up to date with the mobs and NPCs your focused quest
+**! Target (DQT)**, up to date with the mobs and NPCs your focused quest
 needs. Put it on an action bar and press it to find, target, and mark the
 nearest one. Settings are in **Options → AddOns → Dyre's Quest Targeting**, or
-type `/dqt options`. Everything is saved per character.
+type `/dqt`. Everything is saved per character.
 
 It replaces the one part of RestedXP's guides the author still wanted, built
 from Forever's own quest journal instead of a guide.
@@ -23,7 +23,9 @@ from Forever's own quest journal instead of a guide.
   quest counts, not every tracked one.
 - **Kill objectives** it still needs, the first objective first.
 - With **QuestieDB** installed (it comes with Questie, and also installs on its
-  own), also the mobs that **drop the quest's items** (up to three per item),
+  own), also the mobs that **drop the quest's items** (with Questie, the six
+  best by Questie's drop rates, the best one wanted most; `/dqt list` shows each
+  rate),
   every mob a shared kill objective counts, and, once the quest is done, the
   **NPC you turn it in to**. Without it, only kill objectives are targeted:
   the client names no mobs for quest items.
@@ -44,7 +46,7 @@ from Forever's own quest journal instead of a guide.
   combat the macro cannot change, so it catches up when combat ends.
 
 Quest names always use the exact name. A macro holds 255 letters, about six
-names with every line on; `/dqt` says which names did not fit.
+names with every line on; `/dqt list` says which names did not fit.
 
 ## What it does with what it finds
 
@@ -56,8 +58,9 @@ is dead, then:
   and "Mark what the macro finds" turns marking off. In a raid, only leaders
   and assistants can mark.
 - **On a mob, also** (off by default): start attacking, or cast a spell you
-  pick from your spellbook, such as Moonfire (Rank 1) to tag a mob. Never on
-  an NPC.
+  pick from your spellbook, such as Moonfire (Rank 1) to tag a mob. The list
+  holds only harmful spells that cast in 1 second or less, rank by rank.
+  Never on an NPC.
 
 ## Talking to NPCs and clicking quest objects
 
@@ -70,13 +73,14 @@ front of you.
 
 | Command | What it does |
 | --- | --- |
-| `/dqt` | Lists what the macro targets, and why |
+| `/dqt` | Opens the settings (out of combat) |
+| `/dqt list` | Lists what the macro targets, most wanted first, and why: quest objective, item drop with its drop rate, turn-in, or your hit list |
 | `/dqt add [name]` | Adds a name; anything containing it matches |
 | `/dqt add_exact [name]` | Adds a name; only that exact name matches |
 | `/dqt remove [name]` | Takes one name off your hit list |
 | `/dqt reset` | Clears your hit list |
 | `/dqt on`, `/dqt off` | Turns updating the macro on or off; off leaves it as it is |
-| `/dqt options` | Opens the settings |
+| `/dqt options` | Opens the settings, as `/dqt` does |
 | `/dqt debug` | Prints the raw quest objectives and QuestieDB's answers |
 
 `/questtargeting` works the same, in case another AddOn uses `/dqt`.
@@ -86,20 +90,36 @@ front of you.
 Questie is optional.
 
 - **Neither Questie nor QuestieDB:** the macro follows the game's focus (quest
-  log and map) and targets kill objectives only; `/dqt` says QuestieDB is not
+  log and map) and targets kill objectives only; `/dqt list` says QuestieDB is not
   loaded. Your hit list works as always.
 - **QuestieDB without Questie** (keep its folder, disable Questie): quest-item
   droppers and turn-in NPCs work too, with the game's focus.
 - **Questie on:** its tracker focus counts as well, unless you turn "Follow
-  Questie's tracker focus" off.
+  Questie's tracker focus" off. Two more settings, off until you turn them on:
+  - **Keep Questie's and the game's focus in sync:** focus a quest in
+    Questie's tracker and the game's quest log and map focus it too, and the
+    other way round. A Questie objective focus gives the game its quest.
+    Unfocusing in Questie clears the game's focus.
+  - **Point TomTom at the focused quest** (needs TomTom): points the TomTom
+    arrow at the nearest of the quest mobs the macro looks for, or at the
+    turn-in once the quest is done. It moves each time the focused quest or
+    objective changes, an objective is done, or the quest is ready to turn
+    in. It never moves at login, so a waypoint of your own stays.
+
+  **Both are experimental: use them with caution.** They use Questie's own
+  code, not a public API, so a Questie update can stop them; the macro keeps
+  working.
 
 ## How it works, and its limits
 
 - The macro is rewritten only out of combat and only when it changes;
   anything that changes in combat is written when combat ends.
 - Each character has its own macro in the character tab, so each needs one
-  free character macro slot. An account-wide macro with the same name is left
-  alone, and DQT says so.
+  free character macro slot. Short of slots? **Use an account-wide macro**
+  (off by default) keeps one account macro instead, rewritten for whichever
+  character is logged in. Do not use it if you play two characters at once.
+  After switching, put the new macro on your bars and delete the old one;
+  DQT leaves the other one alone and says so.
 - Without QuestieDB, a kill objective's name comes from its English text
   ("Dire Condor slain: 0/8"). QuestieDB's names are English too.
 - Another AddOn that sets the game's focus, such as RestedXP's guides (even

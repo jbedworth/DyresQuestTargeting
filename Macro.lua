@@ -1,11 +1,18 @@
 local _, DQT = ...
 
--- The character macro "! Quest Targets" ("!" sorts it first; macro names
--- hold at most 16 letters). Each character has its own: RXP's one account
--- macro, shared by every character, is what this avoids.
-DQT.MACRO_NAME = "! Quest Targets"
-local MACRO_ICON = "Ability_Hunter_SniperShot"
+-- The macro "! Target (DQT)" ("!" sorts it first; macro names hold at most
+-- 16 letters). By default a character macro, so each character has its own:
+-- RXP's one account macro, shared by every character, is what this avoids.
+-- "Use an account-wide macro" (db.accountMacro, author-approved) is for
+-- players short of character slots who do not play two characters at once:
+-- one account macro, rewritten for whichever character is logged in.
+DQT.MACRO_NAME = "! Target (DQT)"
+-- Icon file ID 132177, "Hunter Marksman".
+local MACRO_ICON = 132177
 local ICONS = {[DQT.MACRO_NAME] = MACRO_ICON}
+-- The name in pre-release builds. A character macro of that name is renamed
+-- in place, so it stays on the player's action bars.
+local OLD_NAMES = {[DQT.MACRO_NAME] = "! Quest Targets"}
 local MACRO_LIMIT = 255
 -- Constants.MacroConsts (MacroConstantsDocumentation.lua); the MAX_*_MACROS
 -- globals exist only once Blizzard's Macro window has loaded.
@@ -31,8 +38,11 @@ local function MarkerLine(mob, npc)
     if mob > 0 then
         clauses[#clauses + 1] = "[harm,nodead] !" .. mob
     end
+    -- With no target, noharm and nodead are both true, and /tm on nothing
+    -- answers "You can't do that right now" (found in client); exists stops it.
+    -- harm already needs a target.
     if npc > 0 then
-        clauses[#clauses + 1] = "[noharm,nodead] !" .. npc
+        clauses[#clauses + 1] = "[exists,noharm,nodead] !" .. npc
     end
     if #clauses > 0 then
         return "/tm " .. table.concat(clauses, "; ")
@@ -126,31 +136,67 @@ local function WarnOnce(key, message)
     end
 end
 
+local function ScopeWord(account)
+    return account and "account-wide" or "character"
+end
+
+-- The index of the macro called name among account macros (1 up) or this
+-- character's (after MAX_ACCOUNT_MACROS), as Blizzard's Macro window numbers
+-- them (Blizzard_MacroUI.lua), or nil. GetMacroIndexByName alone cannot tell
+-- an account macro from a character one of the same name.
+local function FindMacro(name, account)
+    local accountSlots = MacroLimit("MAX_ACCOUNT_MACROS", DEFAULT_ACCOUNT_MACROS)
+    local numAccount, numCharacter = GetNumMacros()
+    local first = account and 1 or accountSlots + 1
+    local count = account and numAccount or numCharacter
+    if type(count) ~= "number" then
+        return nil
+    end
+    for index = first, first + count - 1 do
+        local macroName = GetMacroInfo(index)
+        if macroName == name then
+            return index
+        end
+    end
+end
+
 -- Macros change only out of combat; a body asked for in combat waits for
--- PLAYER_REGEN_ENABLED (FlushMacro). Written only when the body changes.
+-- PLAYER_REGEN_ENABLED (FlushMacro). Written only when the body changes. A
+-- macro of the same name in the other scope (the setting was switched, or
+-- the player made one) is left alone, with a word in chat.
 local function WriteNamed(name, body)
     if InCombatLockdown() then
         pending[name] = body
         return
     end
     pending[name] = nil
-    local index = GetMacroIndexByName(name)
-    if type(index) ~= "number" or index == 0 then
-        local _, numCharacter = GetNumMacros()
-        if type(numCharacter) == "number"
-                and numCharacter >= MacroLimit("MAX_CHARACTER_MACROS", DEFAULT_CHARACTER_MACROS) then
-            WarnOnce("slots " .. name, "No free character macro slot for \"" .. name
-                .. "\"; free one and DQT adds it.")
+    local account = DQT.db.accountMacro == true
+    local index = FindMacro(name, account)
+    local oldName = OLD_NAMES[name]
+    local oldIndex = not index and not account and oldName and FindMacro(oldName, false)
+    if oldIndex then
+        EditMacro(oldIndex, name, ICONS[name], body)
+        WarnOnce("renamed " .. name, "Renamed the character macro \"" .. oldName .. "\" to \"" .. name .. "\".")
+    elseif not index then
+        local numAccount, numCharacter = GetNumMacros()
+        local used = account and numAccount or numCharacter
+        local limit = account and MacroLimit("MAX_ACCOUNT_MACROS", DEFAULT_ACCOUNT_MACROS)
+            or MacroLimit("MAX_CHARACTER_MACROS", DEFAULT_CHARACTER_MACROS)
+        if type(used) == "number" and used >= limit then
+            WarnOnce("slots " .. tostring(account) .. name, "No free " .. ScopeWord(account) .. " macro slot for \""
+                .. name .. "\"; free one and DQT adds it.")
             return
         end
-        CreateMacro(name, ICONS[name], body, true)
-        WarnOnce("created " .. name, "Made the character macro \"" .. name
+        CreateMacro(name, ICONS[name], body, not account)
+        WarnOnce("created " .. tostring(account) .. name, "Made the " .. ScopeWord(account) .. " macro \"" .. name
             .. "\". Put it on an action bar from the Macros window (/macro).")
-    elseif index <= MacroLimit("MAX_ACCOUNT_MACROS", DEFAULT_ACCOUNT_MACROS) then
-        WarnOnce("account " .. name, "An account-wide macro is named \"" .. name
-            .. "\". Rename or delete it, so each character can have its own.")
     elseif GetMacroBody(index) ~= body then
         EditMacro(index, name, ICONS[name], body)
+    end
+    if FindMacro(name, not account) then
+        WarnOnce("other " .. tostring(account) .. name, "The " .. ScopeWord(not account) .. " macro \"" .. name
+            .. "\" is not updated now; DQT keeps the " .. ScopeWord(account) .. " one. Delete the "
+            .. ScopeWord(not account) .. " one, and put the " .. ScopeWord(account) .. " one on your bars.")
     end
 end
 
@@ -172,9 +218,11 @@ function DQT.MacroPending()
 end
 
 function DQT.ReportMacroDebug()
-    local index = GetMacroIndexByName(DQT.MACRO_NAME)
+    local account = DQT.db.accountMacro == true
+    local index = FindMacro(DQT.MACRO_NAME, account)
     local numAccount, numCharacter = GetNumMacros()
-    DQT.Report("debug macro index=" .. DQT.Describe(index) .. " account=" .. DQT.Describe(numAccount)
+    DQT.Report("debug macro " .. ScopeWord(account) .. " index=" .. DQT.Describe(index)
+        .. " account=" .. DQT.Describe(numAccount)
         .. " character=" .. DQT.Describe(numCharacter) .. "/"
         .. MacroLimit("MAX_CHARACTER_MACROS", DEFAULT_CHARACTER_MACROS) .. " pending=" .. tostring(DQT.MacroPending()))
     local current = DQT.current

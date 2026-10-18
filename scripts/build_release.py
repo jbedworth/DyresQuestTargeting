@@ -243,12 +243,12 @@ def _release_notes(version, changes):
 - Beta for WoW: Forever. Built for Forever beta {GAME_VERSION}, build {TARGET_BUILD},
   Interface {INTERFACE}. DQT runs on later beta builds while the client provides
   the APIs it needs, and says so in chat if they are missing.
-- Keeps the character macro "! Quest Targets" up to date with the mobs and NPCs
+- Keeps the character macro "! Target (DQT)" up to date with the mobs and NPCs
   your focused quest needs, and marks what it finds.
 - With QuestieDB installed, it also targets the mobs that drop quest items and
   the NPC you turn the quest in to.
 - `/dqt add <name>` and `/dqt add_exact <name>` add your own targets; settings
-  in Options > AddOns, or `/dqt options`.
+  in Options > AddOns, or `/dqt`; `/dqt list` shows what the macro targets.
 '''
 
 

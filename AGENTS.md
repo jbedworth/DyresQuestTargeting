@@ -16,29 +16,40 @@ prefix `DQT:`. Listings say plainly that it is for WoW: Forever.
 
 ### The macro (built; author-approved design)
 
-- One character macro, "! Quest Targets" ("!" sorts it first; at most 16
+- One character macro, "! Target (DQT)" ("!" sorts it first; at most 16
   letters), per character (author-approved: RXP's one account macro, shared
   by every character, was a problem). Created in the character tab when
-  missing; an account macro of the same name is left alone with a warning.
-  The icon is `Ability_Hunter_SniperShot`.
+  missing. "Use an account-wide macro" (`db.accountMacro`, default off;
+  author-approved, for players short of character slots who do not play two
+  characters at once) makes and updates one account macro instead. DQT looks
+  in one scope only (`GetMacroInfo` over that scope's index range, as
+  Blizzard's Macro window numbers them); a macro of the same name in the
+  other scope is left alone, with a word in chat.
+  The icon is file ID 132177, "Hunter Marksman" (author's pick). A character
+  macro with the pre-release name "! Quest Targets" is renamed in place.
 - Rewritten only out of combat and only when the body changes. A body asked
   for in combat waits for `PLAYER_REGEN_ENABLED`. Quest events come in
   bursts; one rebuild 0.2 s after the first covers each.
 - Body, in order: `/cleartarget`; one line per name, least important first
   (every line runs and the last one that finds a unit wins); `/targetlasttarget
   [dead]`; the marker line; the opener line. At most 255 letters: when full,
-  the least important names are left out, and `/dqt` says which. With no
+  the least important names are left out, and `/dqt list` says which. With no
   names, a `//` comment says so.
-- Markers (author-approved): one line, `/tm [harm,nodead] !8; [noharm,nodead]
-  !4`, skull on a mob and green triangle on an NPC (there is no arrow marker:
-  `MAX_RAID_TARGETS_USER` is 8). `!` keeps a second press from toggling the
-  mark off. `noharm` rather than `help`, so neutral NPCs count. Each marker is
+- Markers (author-approved): one line, `/tm [harm,nodead] !8;
+  [exists,noharm,nodead] !4`, skull on a mob and green triangle on an NPC
+  (there is no arrow marker: `MAX_RAID_TARGETS_USER` is 8). `!` keeps a second
+  press from toggling the mark off. `noharm` rather than `help`, so neutral
+  NPCs count; `exists`, because with no target `noharm` is true and `/tm`
+  answers "You can't do that right now" (found in client). Each marker is
   a setting (None to Skull), and "Mark what the macro finds" turns the line
   off (for purists). Never mark from AddOn code: `GetRaidTargetIndex` is secret.
 - Opener (author-approved): "On a mob, also" is Nothing (default), Start
   attacking (`/startattack [harm,nodead]`), or a spell picked from a list of
-  every active spellbook spell, `/cast [harm,nodead] Name(Rank N)`, each rank
-  up to the one the spellbook shows. Never on an NPC. A saved spell the
+  active spellbook spells, `/cast [harm,nodead] Name(Rank N)`, each rank
+  up to the one the spellbook shows. Only harmful spells
+  (`C_Spell.IsSpellHarmful`) that cast in 1 second or less
+  (`C_Spell.GetSpellInfo(...).castTime`, ms) are listed, checked per rank
+  (author-approved); without those APIs, every spell. Never on an NPC. A saved spell the
   spellbook no longer shows stays in the list. Spell names are at most 40
   letters.
 - Interact cannot be done by a macro or AddOn code (no slash command, no
@@ -77,8 +88,17 @@ prefix `DQT:`. Listings say plainly that it is for WoW: Forever.
   our own database): `LibQuestieDB.RequireContract(4)`, then
   `Quest.objectives` (creature entries matched to an objective by NPC name or
   text; shared kill-credit entries give up to 3 NPCs), `Item.npcDrops` for item
-  objectives (up to 3 mobs, matched by item name), and, for a complete quest,
+  objectives (matched by item name), and, for a complete quest,
   `Quest.finishedBy` (up to 2 turn-in NPCs). An older contract is not used.
+  NPC names containing "UNUSED" (QuestieDB placeholders) are skipped.
+- The best droppers (author-approved): with Questie loaded, each item's
+  droppers are ranked by Questie's drop rate (`QuestieDB.GetItemDroprate`,
+  its tooltip data: a Questie correction, then private-server, then Wowhead;
+  on Forever, the Classic tables), and the best 6 are kept, the best last so
+  it wins and is the last left out. Without Questie or rates, QuestieDB's
+  order. `/dqt list` shows each dropper's rate; `/dqt debug` lists every dropper.
+  Not the raw `LibQuestieDB.Support` tables: merging them would copy
+  Questie's logic.
 - The hit list (author's name for it; saved as `db.added`): `/dqt add [name]`
   writes `/tar Name`
   (similar names), `/dqt add_exact [name]` writes `/targetexact Name`. With
@@ -91,9 +111,10 @@ prefix `DQT:`. Listings say plainly that it is for WoW: Forever.
   fixed line and the longest opener, is refused.
 - A change of focused quest (or Questie objective) is said in chat
   (author-approved): "Focused quest changed via Questie|Quest Focus (<title>),
-  targeting updated to <the name the macro looks for first>", "after combat"
-  while the write waits, or "No focused quest; ...". Not at login, and not for
-  progress on the same quest.
+  targeting updated to <the quest's own first mob>", "after combat" while the
+  write waits, then "Your hit list comes first: <name>." when the hit list
+  wins (so it does not hide the change); or "No focused quest; ...". Not at
+  login, and not for progress on the same quest.
 - A name that leaves the same focused quest's list (its objective done, or the
   quest complete) is said in chat (author-approved): "<name> removed: Quest
   <title> objective completed. Use /dqt add if you want to keep targeting
@@ -109,21 +130,53 @@ prefix `DQT:`. Listings say plainly that it is for WoW: Forever.
   and a maintained "! Hit List" macro. Finished objectives should drop out on
   their own; a case where one did not is being reproduced first.
 - `/dqt on` and `/dqt off` (and the settings page's switch): off leaves the
-  macro as it is.
+  macro as it is, and syncs nothing.
+
+### With Questie installed (built; author-approved, both default off)
+
+Both are marked experimental (author): under the settings section heading
+"Questie Synchronization (Experimental)" (when the client has
+`CreateSettingsListSectionHeaderInitializer`), "(experimental)" in the
+setting names, a caution in their tooltips, README, CHANGELOG, and listing.
+
+- "Keep Questie's and the game's focus in sync" (`db.syncFocus`; needs
+  "Follow Questie's tracker focus"): the focus you change last is copied to
+  the other side. Questie's is set as its tracker menu sets it
+  (`TrackerUtils:FocusQuest`, then `QuestieQuest:ToggleNotes(false)`); the
+  game's with `C_SuperTrack.SetSuperTrackedQuestID`, and 0 clears it when you
+  unfocus in Questie. The game has no objective focus: a Questie objective
+  focus gives the game its quest, and a game focus on Questie's own quest
+  keeps Questie's (objective) focus.
+- "Point TomTom at the focused quest" (`db.tomtom`; needs Questie and
+  TomTom): the nearest spawn of the quest mobs the macro lists
+  (author-approved: Questie's own target can be a dropper the macro leaves
+  out), from `QuestieDB:GetNPC` spawns and `DistanceUtils.GetNearestSpawn`,
+  set with `TrackerUtils:SetTomTomTarget`. A complete quest uses
+  `TrackerUtils.SetQuestTomTomTarget` (the turn-in). With no spawn data, as
+  Questie's "Set TomTom Target" does: an objective focus uses that
+  objective's `spawnList` with `DistanceUtils.GetNearestObjective`, a quest
+  focus `SetQuestTomTomTarget`. Pointed again when the focus, the unfinished
+  objectives, the macro's quest mobs, or completion change; when the setting
+  is turned on; never at login, so a waypoint of the player's own stays.
+- Both call Questie's private modules through `QuestieLoader:ImportModule`
+  (an unknown module comes back as an empty table, so each function is
+  checked). They run after the macro is written, so a Questie change cannot
+  stop the macro. Not confirmed in client.
 
 ### Commands
 
-- `/dqt` lists the focused quest, the names most wanted first with where each
-  came from, names left out, and whether QuestieDB is loaded. `options`,
-  `add`, `add_exact`, `remove`, `reset`, `on`, `off`, `debug` (runs even when
-  DQT is unavailable). Backup slash `/questtargeting`; a clash on `/dqt` is
+- `/dqt` opens the settings (author-approved; not in combat, where it says
+  so), as `/dqt options` does. `/dqt list` lists the focused quest, the names
+  most wanted first with where each came from (and drop rates), names left
+  out, and whether QuestieDB is loaded. `add`, `add_exact`, `remove`,
+  `reset`, `on`, `off`, `debug` (runs even when DQT is unavailable). Backup slash `/questtargeting`; a clash on `/dqt` is
   reported once at login.
 
 ### Later (discussed, not agreed to build)
 
-- TomTom's arrow at the focused quest (TomTom's own quest waypoints are off on
-  Forever: they need `WOW_PROJECT_ID` Mainline). Delete-cheapest-junk is
-  skipped: Scrap already has that keybind.
+- Delete-cheapest-junk is skipped: Scrap already has that keybind. (TomTom's
+  own quest waypoints are off on Forever, so DQT points TomTom through
+  Questie; see above.)
 - Interacting with the found NPC by turning the same key into
   `INTERACTTARGET` out of combat (two presses).
 

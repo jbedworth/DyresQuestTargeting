@@ -27,6 +27,9 @@ FOREVER_TYPE_ID = 88568
 TIMEOUT = 30
 MAX_RESPONSE_BYTES = 2 * 1024 * 1024
 RECEIPT_NAME = "curseforge-upload.json"
+# Questie (CurseForge project 334372) is optional: without it DQT follows the
+# game's quest focus. QuestieDB has no CurseForge project, so it is not listed.
+RELATIONS = {"projects": [{"slug": "questie", "projectID": 334372, "type": "optionalDependency"}]}
 
 
 class PublishError(Exception):
@@ -218,7 +221,7 @@ def publish(artifact_dir, project_id, game_version_id, tag):
     versions = request_json(opener, urllib.request.Request(VERSIONS_URL, headers=headers))
     verify_server_version(versions, game_version_id)
     metadata = {"gameVersions": [game_version_id], "releaseType": manifest["channel"],
-                "changelog": changelog, "changelogType": "markdown"}
+                "changelog": changelog, "changelogType": "markdown", "relations": RELATIONS}
     body, content_type = multipart(metadata, manifest["archive_name"], archive_bytes)
     upload_headers = dict(headers, **{"Content-Type": content_type})
     request = urllib.request.Request(UPLOAD_URL.format(project_id=project_id),
