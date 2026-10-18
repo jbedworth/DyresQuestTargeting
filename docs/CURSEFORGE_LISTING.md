@@ -9,6 +9,7 @@ tested.
 | Field | Value |
 | --- | --- |
 | Name | Dyre's Quest Targeting |
+| Project ID | 1752880 (the value for the `CURSEFORGE_PROJECT_ID` repository variable; see docs/RELEASE_PLAN.md) |
 | Class | Addons |
 | Main category | Quests. Keep it identical to the TOC `## Category`, which groups the AddOn in the in-game AddOn list. |
 | Additional categories | None yet (CurseForge allows up to 4; unrelated ones can send the project back for changes). |
