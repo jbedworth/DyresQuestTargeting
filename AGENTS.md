@@ -151,9 +151,9 @@ prefix `DQT:`. Listings say plainly that it is for WoW: Forever.
 - The TOC uses `## Category: Quests`; keep it identical to the CurseForge main
   category, because the in-game AddOn list groups by exact text.
 - No runtime assets. Add none without agreement.
-- Not yet a Git repository. If one is made: origin
-  git@github.com:jbedworth/DyresQuestTargeting.git, text LF under
-  .gitattributes. Inspect Git state before acting and preserve user work.
+- Git origin: git@github.com:jbedworth/DyresQuestTargeting.git (public, as
+  all of the author's AddOns). Inspect Git state before acting and preserve
+  user work. Text is LF under .gitattributes.
 
 ## Client and API verification
 
