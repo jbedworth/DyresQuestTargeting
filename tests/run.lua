@@ -733,7 +733,7 @@ local SILK = {[101] = {title = "Silk", objectives = {objective("Tarantula Silk: 
 
 test("with Questie's drop rates, the best droppers come first, and /dqt shows the rates", function()
     local state = fixture({db = DB, focus = 101, quests = SILK,
-        questie = {rates = {[50] = {[20] = 4, [21] = 30.25, [22] = -12, [23] = 18}}}})
+        questie = {rates = {[50] = {[20] = 4, [21] = 30.3, [22] = -12, [23] = 18}}}})
     contains(state.macro(), "/cleartarget\n/targetexact Tarantula\n/targetexact Cave Tarantula\n"
         .. "/targetexact Venomous Tarantula\n/targetexact Giant Tarantula\n", "the best rate last, so it wins")
     state.clear()
