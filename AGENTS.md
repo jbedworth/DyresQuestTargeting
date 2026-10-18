@@ -188,6 +188,8 @@ setting names, a caution in their tooltips, README, CHANGELOG, and listing.
   checks, slash conflict reporting, the hit list, refresh scheduling, and
   startup; Quest builds the focused quest's names; Macro builds and writes the
   macro; Options owns the settings page and the spellbook list.
+- artwork/ holds the logo (SVG source, 1024 and 512 PNG renders) and
+  screenshots/ for listings; it is never packaged.
 - tests/run.lua holds the Lua 5.1 mock suite. tests/test_*.py cover the
   release helpers in scripts/. .github/workflows/ holds CI, opt-in publishing,
   and the approval gate check.
