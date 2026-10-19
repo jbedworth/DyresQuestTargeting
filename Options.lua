@@ -120,6 +120,20 @@ local function HasSettingsAPI()
     return true
 end
 
+-- Settings dropdown frames are pooled across AddOns, and Blizzard sets a
+-- frame's selection-text function only when an initializer has one, never
+-- clearing it (Blizzard_SettingControls.lua, InitDropdown). Another AddOn's
+-- function (found in client: Dyre's Sounds' sound labels) then labels our
+-- dropdown. Ours returns nil, which replaces a stale one and keeps the
+-- default label, the chosen option's text.
+local function Dropdown(setting, choices, tooltip)
+    local initializer = Settings.CreateDropdown(category, setting, choices, tooltip)
+    if type(initializer) == "table" then
+        initializer.getSelectionTextFunc = function() return nil end
+    end
+    return initializer
+end
+
 local function Proxy(variable, variableType, name, default, getValue, setValue)
     return Settings.RegisterProxySetting(category, variable, variableType, name, default, getValue, setValue)
 end
@@ -151,7 +165,7 @@ local function Marker(variable, name, key, default, tooltip)
                 DQT.Refresh()
             end
         end)
-    return Settings.CreateDropdown(category, setting, MarkerChoices, tooltip)
+    return Dropdown(setting, MarkerChoices, tooltip)
 end
 
 function DQT.InitializeOptions()
@@ -181,7 +195,7 @@ function DQT.InitializeOptions()
                 DQT.Refresh()
             end
         end)
-    Settings.CreateDropdown(category, opener, OpenerChoices,
+    Dropdown(opener, OpenerChoices,
         "What the macro does to a mob it finds: nothing, start attacking, or cast one of your spells, such as "
             .. "a low rank you tag mobs with. Only harmful spells with a cast time of 1 second or less are "
             .. "listed. Never on an NPC.")

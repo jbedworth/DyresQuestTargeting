@@ -1054,6 +1054,15 @@ test("the opener lists every spellbook spell and rank, and casts the one picked"
     lacks(state.macro(), "/cast")
 end)
 
+test("each dropdown sets its own label function, so a pooled frame's stale one is replaced", function()
+    local state = fixture()
+    for _, index in ipairs({4, 5, 6}) do
+        local dropdown = state.registered.initializers[index]
+        equal(type(dropdown.getSelectionTextFunc), "function", dropdown.setting.variable)
+        equal(dropdown.getSelectionTextFunc(), nil, "nil keeps the chosen option's own text")
+    end
+end)
+
 test("without the spell info API, the opener lists every spell, as before", function()
     local state = fixture({globals = spellbookGlobals(true)})
     local labels = {}

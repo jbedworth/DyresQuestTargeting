@@ -106,6 +106,9 @@ With `/dqt debug` for details:
    `castTime` is in milliseconds (an instant spell is 0).
 10. "Mark what the macro finds" off: no `/tm` line.
 11. Delete the macro: the next quest change makes it again.
+19. With other AddOns' settings dropdowns opened first (for example a Dyre's
+    Sounds sound picker in Mage Tools Forever), DQT's three dropdowns still
+    show their own choice (Skull, Triangle, Nothing), not a sound name.
 18. `/dqt` opens the settings page; in combat it says it opens out of combat
     and opens nothing. `/dqt list` works in and out of combat.
 17. "Use an account-wide macro" on: "! Target (DQT)" appears in the General
