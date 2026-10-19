@@ -3,6 +3,10 @@
 Player-facing changes for each Dyre's Quest Targeting release, newest first. The
 release builder puts the matching section at the top of each release's notes.
 
+## 0.1.1-beta
+
+- Settings dropdowns (markers and "On a mob, also") show their own choice, even after you open another AddOn's sound picker, such as one from Dyre's Sounds 0.1.0.
+
 ## 0.1.0-beta
 
 First beta for WoW: Forever.
