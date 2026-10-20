@@ -174,7 +174,10 @@ minimap menu. DQT has no movable frames, so it only joins those.
 - TOC: `## OptionalDeps` lists `DyresToolkit` (never `## Dependencies`, so
   DQT loads without it) and `## Group: DyresToolkit` nests DQT under the
   toolkit in the in-game AddOn list. CurseForge uploads list `dyres-toolkit`
-  as a required dependency, so the app installs it; Questie stays optional.
+  as a required dependency, so the app installs it; Questie (334372) and
+  TomTom (18808) are optional dependencies (author: "Works best with both").
+  TomTom is not in the TOC: DQT reads `_G.TomTom` only when it points, after
+  login, never at load time.
 - When `DyresToolkit.RequireContract(1)` returns the toolkit, Core calls
   `RegisterAddOn` (addon, title, `openSettings = DQT.OpenSettings`) and
   Options makes the page with `RegisterSettingsCategory`, under "Dyre's

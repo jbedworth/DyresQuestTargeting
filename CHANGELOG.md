@@ -3,6 +3,12 @@
 Player-facing changes for each Dyre's Quest Targeting release, newest first. The
 release builder puts the matching section at the top of each release's notes.
 
+## 1.0.0
+
+The first full release for WoW: Forever, no longer marked beta: it was play tested on the Forever beta client 1.60.1, build 70450. CurseForge now offers it as a release, so the app updates it and installs what it needs for every player.
+
+- The CurseForge app installs Dyre's Toolkit with DQT. Questie and TomTom are listed as optional: DQT works best with both.
+
 ## 0.1.2-beta
 
 - Joins Dyre's Toolkit, when it is installed: the settings move under Options > AddOns > Dyre's AddOns, the toolkit's minimap menu opens them, and the in-game AddOn list shows DQT under Dyre's Toolkit. The CurseForge app installs the toolkit with DQT.

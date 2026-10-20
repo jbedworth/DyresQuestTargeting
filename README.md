@@ -4,8 +4,9 @@ A targeting macro for World of Warcraft: Forever (beta) that follows the quest
 you are working on. Dyre's Quest Targeting (DQT) keeps one character macro,
 **! Target (DQT)**, up to date with the mobs and NPCs your focused quest
 needs. Put it on an action bar and press it to find, target, and mark the
-nearest one. Settings are in **Options → AddOns → Dyre's Quest Targeting**, or
-type `/dqt`. Everything is saved per character.
+nearest one. Type `/dqt` for the settings (see [Settings](#settings)).
+Everything is saved per character. Works best with **Questie** and **TomTom**;
+both are optional.
 
 It replaces the one part of RestedXP's guides the author still wanted, built
 from Forever's own quest journal instead of a guide.
