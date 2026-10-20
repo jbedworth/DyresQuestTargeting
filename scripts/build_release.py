@@ -27,7 +27,7 @@ PACKAGE_FILES = TEXT_FILES
 # targeted. The runtime itself detects features, not builds.
 INTERFACE = 16001
 GAME_VERSION = "1.60.1"
-TARGET_BUILD = 70338
+TARGET_BUILD = 70450
 ZIP_TIMESTAMP = (1980, 1, 1, 0, 0, 0)
 FILE_MODE = stat.S_IFREG | 0o644
 SOURCE_COMMIT_RE = re.compile(r"[0-9a-f]{40}", re.ASCII)

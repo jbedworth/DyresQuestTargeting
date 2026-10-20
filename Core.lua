@@ -10,6 +10,10 @@ local SLASH_KEY = "DYRESQUESTTARGETING"
 local PRIMARY_SLASH = "/dqt"
 local BACKUP_SLASH = "/questtargeting"
 local MAX_SLASH_ALIASES = 10
+-- Dyre's Toolkit: the shared settings home and minimap menu for Dyre's
+-- AddOns (its AGENTS.md, "The interface"). Optional; DQT works without it.
+local TOOLKIT_CONTRACT = 1
+local TOOLKIT_HINT = "Install Dyre's Toolkit from CurseForge for one settings home for all Dyre's AddOns."
 -- Quest events come in bursts (QUEST_LOG_UPDATE fires several times a
 -- second while you fight); one rebuild covers each burst.
 local REFRESH_DELAY = 0.2
@@ -37,6 +41,19 @@ function DQT.Describe(value)
     return tostring(value)
 end
 
+-- Dyre's Toolkit when installed with the contract DQT uses, else nil (also
+-- for a newer, incompatible one: DQT then keeps its own top-level page).
+function DQT.Toolkit()
+    local toolkit = DyresToolkit
+    if type(toolkit) ~= "table" or type(toolkit.RequireContract) ~= "function" then
+        return nil
+    end
+    local required = toolkit.RequireContract(TOOLKIT_CONTRACT)
+    if type(required) == "table" then
+        return required
+    end
+end
+
 -- Reads TOC fields so the banner follows the packaged version; never gates operations.
 local function Metadata(field)
     if type(C_AddOns) ~= "table" or type(C_AddOns.GetAddOnMetadata) ~= "function" then
@@ -45,6 +62,19 @@ local function Metadata(field)
     local value = C_AddOns.GetAddOnMetadata(addonName, field)
     if type(value) == "string" and value:find("%S") then
         return value
+    end
+end
+
+-- Joins the toolkit's minimap menu; without the toolkit, says once (at login)
+-- where to get it.
+local function JoinToolkit()
+    local toolkit = DQT.Toolkit()
+    if toolkit then
+        if type(toolkit.RegisterAddOn) == "function" then
+            toolkit.RegisterAddOn({addon = addonName, title = DEFAULT_TITLE, openSettings = DQT.OpenSettings})
+        end
+    elseif DyresToolkit == nil then
+        DQT.Report(TOOLKIT_HINT)
     end
 end
 
@@ -530,6 +560,7 @@ events:SetScript("OnEvent", function(self, event, firstArg)
     -- Called here rather than from each file's own PLAYER_LOGIN handler, so
     -- startup never depends on event handler order.
     DQT.InitializeOptions()
+    JoinToolkit()
     for _, name in ipairs(QUEST_EVENTS) do
         self:RegisterEvent(name)
     end

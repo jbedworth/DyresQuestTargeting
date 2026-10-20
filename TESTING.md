@@ -4,7 +4,8 @@
 
 1. **Pinned source review.** Client behavior is read from Blizzard's FrameXML
    and generated API documentation at Gethe/wow-ui-source commit
-   `943764493e6b16d63ded3ab304150d1f05e58b57` (`1.60.1.70338`). Source
+   `943764493e6b16d63ded3ab304150d1f05e58b57` (`1.60.1.70338`); the client
+   is tested on build 70450, Interface 16001 as before. Source
    establishes declared APIs, templates, and code paths, not operational behavior.
 2. **Automated mock tests.** `tests/run.lua` exercises commands, saved
    settings, the names built from a focused quest (with and without a mock
@@ -44,7 +45,9 @@ native `python3`.
   (Blizzard_ChatFrameBase/Shared/SlashCommands.lua), which takes the first `;`
   clause whose conditions match; `!N` skips a unit that already has marker N.
   `/target` calls `TargetUnit(name)` and `/targetexact` `TargetUnit(name, true)`.
-  `/startattack` and `/cast` are secure macro commands.
+  `/startattack` and `/use` are secure macro commands; `/use` uses an item
+  of that name (`SecureCmdItemParse`, `C_Item.GetItemInfo`), else calls
+  `CastSpellByName(action, target)`, so `Name(Rank N)` casts that rank.
 - Interacting has no slash command and no secure action type: `INTERACTTARGET`
   is only a key binding (Bindings_Camelot.xml), enabled by Options → Controls
   → Enable Interact Key (`softTargetInteract`).
@@ -109,6 +112,12 @@ With `/dqt debug` for details:
 19. With other AddOns' settings dropdowns opened first (for example a Dyre's
     Sounds sound picker in Mage Tools Forever), DQT's three dropdowns still
     show their own choice (Skull, Triangle, Nothing), not a sound name.
+20. With Dyre's Toolkit: the AddOn list shows DQT under Dyre's Toolkit; the
+    settings page is under Options > AddOns > Dyre's AddOns, with the Questie
+    section heading; `/dqt` and the toolkit's minimap menu open it; no install
+    line in chat. Disable the toolkit and `/reload`: DQT is at the top of the
+    AddOn list again (Quests), its page is at the top level, and chat says
+    once to install Dyre's Toolkit from CurseForge.
 18. `/dqt` opens the settings page; in combat it says it opens out of combat
     and opens nothing. `/dqt list` works in and out of combat.
 17. "Use an account-wide macro" on: "! Target (DQT)" appears in the General

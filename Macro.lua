@@ -25,7 +25,9 @@ local DEFAULT_ACCOUNT_MACROS, DEFAULT_CHARACTER_MACROS = 120, 30
 local CLEAR_LINE = "/cleartarget"
 local DEAD_LINE = "/targetlasttarget [dead]"
 local ATTACK_LINE = "/startattack [harm,nodead]"
-local CAST_PREFIX = "/cast [harm,nodead] "
+-- /use rather than /cast: one letter shorter. With no item of that name, it
+-- casts the spell (SlashCommands.lua, SLASH_COMMAND.USE: CastSpellByName).
+local CAST_PREFIX = "/use [harm,nodead] "
 local EXACT_PREFIX = "/targetexact "
 local SIMILAR_PREFIX = "/tar "
 local NOTHING_BODY = "// Dyre's Quest Targeting: nothing to target. /dqt add <name> adds one."

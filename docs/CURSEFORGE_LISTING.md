@@ -11,12 +11,12 @@ tested.
 | Name | Dyre's Quest Targeting |
 | Project ID | 1752880 (the value for the `CURSEFORGE_PROJECT_ID` repository variable; see docs/RELEASE_PLAN.md) |
 | Class | Addons |
-| Main category | Quests. Keep it identical to the TOC `## Category`, which groups the AddOn in the in-game AddOn list. |
+| Main category | Quests. Keep it identical to the TOC `## Category`, which groups the AddOn in the in-game AddOn list when Dyre's Toolkit is missing (with it, `## Group: DyresToolkit` nests DQT under the toolkit). |
 | Additional categories | None yet (CurseForge allows up to 4; unrelated ones can send the project back for changes). |
 | Author shown | Dyre, set through the CurseForge account's username |
 | License | MIT License |
 | Logo | artwork/dyres-quest-targeting-logo.png (1024 x 1024); artwork/dyres-quest-targeting-logo-512.png if a smaller square is wanted |
-| Relations | Questie, optional dependency (CurseForge project 334372). CI uploads set it; add it by hand on any file uploaded through the website. QuestieDB has no CurseForge project. |
+| Relations | Dyre's Toolkit (slug `dyres-toolkit`), required dependency; Questie, optional dependency (CurseForge project 334372). CI uploads set both; add them by hand on any file uploaded through the website. QuestieDB has no CurseForge project. |
 | Screenshots | artwork/screenshots/ (none taken yet; see artwork/README.md) |
 | Source | https://github.com/jbedworth/DyresQuestTargeting |
 | Issues | https://github.com/jbedworth/DyresQuestTargeting/issues |
@@ -55,6 +55,9 @@ It follows the quest you focus in the game's quest log or map, or in Questie's t
 
 With Questie, two optional settings, **experimental and to be used with caution**: keep Questie's and the game's quest focus in sync, and point the TomTom arrow at the nearest of the mobs the macro looks for.
 
+### Dyre's Toolkit
+The CurseForge app installs Dyre's Toolkit with it: one settings home and a minimap menu for all Dyre's AddOns. DQT still works without it.
+
 ### Commands
 - `/dqt` opens the settings; `/dqt list` lists what the macro targets, most wanted first, and why.
 - `/dqt add [name]`, `/dqt add_exact [name]`, `/dqt remove [name]`, `/dqt reset`.
@@ -65,7 +68,7 @@ With Questie, two optional settings, **experimental and to be used with caution*
 A macro cannot interact with an NPC or click a quest object. Use the game's own Interact key (Options, Controls, Enable Interact Key).
 
 ### Compatibility
-Beta, for the Forever beta client 1.60.1. If a client update removes an API it needs, it says so in chat and stays off.
+Beta, for the Forever beta client 1.60.1 (tested on build 70450). If a client update removes an API it needs, it says so in chat and stays off.
 
 WowUp users (2.24.0 or later): install from the repository URL; GitHub releases carry the Forever metadata WowUp needs.
 

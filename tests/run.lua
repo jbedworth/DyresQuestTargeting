@@ -366,7 +366,7 @@ local CONDOR_QUEST = {[101] = {title = "The Condor Hunt", objectives = {
 
 test("logs in with a banner and makes the character macro", function()
     local state = fixture()
-    contains(state.messages[1], "DQT: Dyre's Quest Targeting 0.1.1-beta by Dyre")
+    contains(state.messages[1], "DQT: Dyre's Quest Targeting 0.1.2-beta by Dyre")
     equal(state.said("Ready."), true)
     equal(state.dqt.available, true)
     contains(state.macro(), "nothing to target")
@@ -889,6 +889,8 @@ test("names with ; or too long to fit are refused", function()
     state.env.DyresQuestTargetingDB.opener = string.rep("z", state.dqt.MAX_OPENER_LENGTH)
     state.slash("add_exact " .. longest)
     contains(state.macro(), longest, "the longest allowed name fits with every line on")
+    contains(state.macro(), "/use [harm,nodead] " .. string.rep("z", state.dqt.MAX_OPENER_LENGTH))
+    equal(#state.macro(), 255, "the limit follows the opener's prefix exactly")
 end)
 
 test("/dqt remove and /dqt reset take names off the hit list only", function()
@@ -1043,7 +1045,7 @@ test("the opener lists every spellbook spell and rank, and casts the one picked"
         "harmful spells of 1 second or less only: no Wrath (1.5 s), no Mark of the Wild (helpful)")
     opener.setting:SetValue("Moonfire(Rank 1)")
     local body = lines(state.macro())
-    equal(body[#body], "/cast [harm,nodead] Moonfire(Rank 1)")
+    equal(body[#body], "/use [harm,nodead] Moonfire(Rank 1)")
     opener.setting:SetValue("startattack")
     body = lines(state.macro())
     equal(body[#body], "/startattack [harm,nodead]")
@@ -1051,7 +1053,7 @@ test("the opener lists every spellbook spell and rank, and casts the one picked"
     equal(state.env.DyresQuestTargetingDB.opener, "startattack", "an unsafe name is refused")
     opener.setting:SetValue("")
     lacks(state.macro(), "/startattack")
-    lacks(state.macro(), "/cast")
+    lacks(state.macro(), "/use")
 end)
 
 test("each dropdown sets its own label function, so a pooled frame's stale one is replaced", function()
@@ -1205,6 +1207,80 @@ test("/dqt alone opens the settings, out of combat only; /dqt list lists", funct
     state.slash("list")
     equal(state.said("The macro looks for, most wanted first:"), true, "the list works in combat")
     state.combat = false
+end)
+
+-- Dyre's Toolkit's contract 1, as its Core.lua and Settings.lua give it:
+-- RequireContract returns the toolkit, or nil for a contract it does not have.
+local function toolkitGlobal(contract, noPage)
+    local toolkit = {members = {}}
+    function toolkit.RequireContract(required)
+        if required <= (contract or 1) and required >= 1 then return toolkit end
+    end
+    function toolkit.RegisterAddOn(info) toolkit.members[#toolkit.members + 1] = info end
+    function toolkit.RegisterSettingsCategory(name)
+        if noPage then return nil end
+        local category = {name = name, initializers = {}}
+        function category:GetID() return "id:Dyre's AddOns/" .. name end
+        local layout = {}
+        function layout:AddInitializer(object)
+            category.initializers[#category.initializers + 1] = object
+        end
+        toolkit.page = category
+        return category, layout
+    end
+    return toolkit
+end
+
+local TOOLKIT_HINT = "Install Dyre's Toolkit from CurseForge"
+
+test("with Dyre's Toolkit, the settings page sits under its home and DQT joins its menu", function()
+    local toolkit = toolkitGlobal()
+    local state = fixture({globals = {DyresToolkit = toolkit}})
+    equal(state.registered, nil, "no top-level page")
+    equal(toolkit.page.name, "Dyre's Quest Targeting")
+    local heading
+    for index, object in ipairs(toolkit.page.initializers) do
+        if object.header then heading = index end
+    end
+    equal(toolkit.page.initializers[heading].header, "Questie Synchronization (Experimental)")
+    equal(#toolkit.members, 1)
+    equal(toolkit.members[1].addon, "DyresQuestTargeting")
+    equal(toolkit.members[1].title, "Dyre's Quest Targeting")
+    toolkit.members[1].openSettings()
+    equal(state.opened, "id:Dyre's AddOns/Dyre's Quest Targeting")
+    state.opened = nil
+    state.slash("")
+    equal(state.opened, "id:Dyre's AddOns/Dyre's Quest Targeting", "/dqt opens DQT's own page")
+    equal(state.said(TOOLKIT_HINT), false, "no install hint with the toolkit")
+end)
+
+test("without Dyre's Toolkit, DQT keeps its top-level page and says once where to get it", function()
+    local state = fixture()
+    equal(state.registered.name, "Dyre's Quest Targeting")
+    local count = 0
+    for _, message in ipairs(state.messages) do
+        if message:find(TOOLKIT_HINT, 1, true) then count = count + 1 end
+    end
+    equal(count, 1)
+    contains(state.messages[2] .. state.messages[3], TOOLKIT_HINT)
+    state.clear()
+    state.emit("PLAYER_ENTERING_WORLD")
+    state.advance()
+    equal(state.said(TOOLKIT_HINT), false, "said at login only")
+end)
+
+test("a toolkit without contract 1 or without a page leaves DQT's own page", function()
+    local newer = toolkitGlobal(0)
+    local state = fixture({globals = {DyresToolkit = newer}})
+    equal(state.registered.name, "Dyre's Quest Targeting")
+    equal(#newer.members, 0, "an unknown contract is not used")
+    equal(state.said(TOOLKIT_HINT), false, "installed, so no install hint")
+    local pageless = toolkitGlobal(1, true)
+    local other = fixture({globals = {DyresToolkit = pageless}})
+    equal(other.registered.name, "Dyre's Quest Targeting")
+    equal(#pageless.members, 1, "still in the toolkit's menu")
+    pageless.members[1].openSettings()
+    equal(other.opened, "id:Dyre's Quest Targeting")
 end)
 
 test("a clash on /dqt is reported, with the backup command", function()

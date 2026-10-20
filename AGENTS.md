@@ -45,7 +45,9 @@ prefix `DQT:`. Listings say plainly that it is for WoW: Forever.
   off (for purists). Never mark from AddOn code: `GetRaidTargetIndex` is secret.
 - Opener (author-approved): "On a mob, also" is Nothing (default), Start
   attacking (`/startattack [harm,nodead]`), or a spell picked from a list of
-  active spellbook spells, `/cast [harm,nodead] Name(Rank N)`, each rank
+  active spellbook spells, `/use [harm,nodead] Name(Rank N)` (author's rule:
+  `/use`, not `/cast`, in every Dyre's AddOn macro: one letter shorter; with
+  no item of that name it casts the spell), each rank
   up to the one the spellbook shows. Only harmful spells
   (`C_Spell.IsSpellHarmful`) that cast in 1 second or less
   (`C_Spell.GetSpellInfo(...).castTime`, ms) are listed, checked per rank
@@ -163,6 +165,25 @@ setting names, a caution in their tooltips, README, CHANGELOG, and listing.
   checked). They run after the macro is written, so a Questie change cannot
   stop the macro. Not confirmed in client.
 
+### With Dyre's Toolkit (built; author-approved, 2026-10-19)
+
+Dyre's Toolkit (`DyresToolkit`, its own repository, owned by the coordinating
+session; do not edit it here) gives Dyre's AddOns one settings home and a
+minimap menu. DQT has no movable frames, so it only joins those.
+
+- TOC: `## OptionalDeps` lists `DyresToolkit` (never `## Dependencies`, so
+  DQT loads without it) and `## Group: DyresToolkit` nests DQT under the
+  toolkit in the in-game AddOn list. CurseForge uploads list `dyres-toolkit`
+  as a required dependency, so the app installs it; Questie stays optional.
+- When `DyresToolkit.RequireContract(1)` returns the toolkit, Core calls
+  `RegisterAddOn` (addon, title, `openSettings = DQT.OpenSettings`) and
+  Options makes the page with `RegisterSettingsCategory`, under "Dyre's
+  AddOns", with the same settings and Questie section heading. `/dqt` still
+  opens DQT's own page.
+- Otherwise (no toolkit, a newer contract, or no page from it), the
+  top-level page as before. With no toolkit at all, one chat line at login
+  names CurseForge as the place to install it.
+
 ### Commands
 
 - `/dqt` opens the settings (author-approved; not in combat, where it says
@@ -185,8 +206,8 @@ setting names, a caution in their tooltips, README, CHANGELOG, and listing.
 - Runtime files: DyresQuestTargeting.toc, Commands.lua, Core.lua, Quest.lua,
   Macro.lua, Options.lua, loaded in that order. Commands parses `/dqt`; Core
   owns saved settings and their repair, the login banner, install and API
-  checks, slash conflict reporting, the hit list, refresh scheduling, and
-  startup; Quest builds the focused quest's names; Macro builds and writes the
+  checks, slash conflict reporting, the hit list, refresh scheduling, joining
+  Dyre's Toolkit, and startup; Quest builds the focused quest's names; Macro builds and writes the
   macro; Options owns the settings page and the spellbook list.
 - artwork/ holds the logo (SVG source, 1024 and 512 PNG renders) and
   screenshots/ for listings; it is never packaged.
@@ -203,8 +224,10 @@ setting names, a caution in their tooltips, README, CHANGELOG, and listing.
 - The project uses the MIT License. The public author name is `Dyre` (TOC
   `## Author`, login banner, listings); LICENSE keeps the legal name, John
   Bedworth, and the release builder requires that exact notice.
-- The TOC uses `## Category: Quests`; keep it identical to the CurseForge main
-  category, because the in-game AddOn list groups by exact text.
+- The TOC has `## Group: DyresToolkit`, so DQT nests under Dyre's Toolkit in
+  the in-game AddOn list. Its `## Category: Quests` groups it only when the
+  toolkit is missing; keep that identical to the CurseForge main category,
+  because the list groups by exact text.
 - No runtime assets. Add none without agreement.
 - Git origin: git@github.com:jbedworth/DyresQuestTargeting.git (public, as
   all of the author's AddOns). Inspect Git state before acting and preserve
@@ -212,9 +235,10 @@ setting names, a caution in their tooltips, README, CHANGELOG, and listing.
 
 ## Client and API verification
 
-- Target: Forever beta 1.60.1, build 70338, Interface 16001, Lua 5.1. Pin
+- Target: Forever beta 1.60.1, build 70450, Interface 16001, Lua 5.1. Pin
   source review to Gethe/wow-ui-source commit
-  `943764493e6b16d63ded3ab304150d1f05e58b57`. Treat target-client
+  `943764493e6b16d63ded3ab304150d1f05e58b57` (the 70338 source; the client
+  is tested on 70450). Treat target-client
   documentation and FrameXML as authoritative; Retail and Classic examples are
   references only. Forever is game type "Camelot" (`WOW_PROJECT_ID` 18).
 - Do not gate the runtime on client version, build, Interface, or class. Gate

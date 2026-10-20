@@ -1,7 +1,8 @@
 local _, DQT = ...
 
 -- One settings page in Blizzard's vertical layout, with proxy settings that
--- read and write DyresQuestTargetingDB directly.
+-- read and write DyresQuestTargetingDB directly: under Dyre's Toolkit's
+-- "Dyre's AddOns" when the toolkit is installed, else at the top level.
 local TITLE = "Dyre's Quest Targeting"
 local UNAVAILABLE = "The AddOn settings page is unavailable on this client. Use /dqt on and /dqt off."
 
@@ -172,7 +173,14 @@ function DQT.InitializeOptions()
     if not HasSettingsAPI() then
         return
     end
-    category, layout = Settings.RegisterVerticalLayoutCategory(TITLE)
+    local toolkit = DQT.Toolkit()
+    if toolkit and type(toolkit.RegisterSettingsCategory) == "function" then
+        category, layout = toolkit.RegisterSettingsCategory(TITLE)
+    end
+    local topLevel = not category
+    if topLevel then
+        category, layout = Settings.RegisterVerticalLayoutCategory(TITLE)
+    end
     Flag("DQT_ENABLED", "Keep the macro up to date", "enabled", true,
         "Rewrite the macro \"" .. DQT.MACRO_NAME .. "\" with the mobs and NPCs your focused quest "
             .. "needs, out of combat. Off leaves the macro as it is. /dqt on and /dqt off do the same.")
@@ -228,7 +236,9 @@ function DQT.InitializeOptions()
             .. "the macro looks for (the best droppers, for a quest item), or at the turn-in once the quest is "
             .. "done. It moves when the focused quest or objective changes, an objective is done, or the quest "
             .. "is ready to turn in." .. EXPERIMENTAL)
-    Settings.RegisterAddOnCategory(category)
+    if topLevel then
+        Settings.RegisterAddOnCategory(category)
+    end
 end
 
 -- Never opened in combat (no panels in combat); /dqt list still works then.

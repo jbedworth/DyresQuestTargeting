@@ -3,6 +3,12 @@
 Player-facing changes for each Dyre's Quest Targeting release, newest first. The
 release builder puts the matching section at the top of each release's notes.
 
+## 0.1.2-beta
+
+- Joins Dyre's Toolkit, when it is installed: the settings move under Options > AddOns > Dyre's AddOns, the toolkit's minimap menu opens them, and the in-game AddOn list shows DQT under Dyre's Toolkit. The CurseForge app installs the toolkit with DQT.
+- Without Dyre's Toolkit, DQT works as before, and chat says once at login where to get it.
+- A spell you pick for "On a mob, also" now uses `/use` instead of `/cast` in the macro: it casts the same spell, one letter shorter, so a little more room is left for names.
+
 ## 0.1.1-beta
 
 - Settings dropdowns (markers and "On a mob, also") show their own choice, even after you open another AddOn's sound picker, such as one from Dyre's Sounds 0.1.0.

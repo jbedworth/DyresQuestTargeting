@@ -29,7 +29,10 @@ MAX_RESPONSE_BYTES = 2 * 1024 * 1024
 RECEIPT_NAME = "curseforge-upload.json"
 # Questie (CurseForge project 334372) is optional: without it DQT follows the
 # game's quest focus. QuestieDB has no CurseForge project, so it is not listed.
-RELATIONS = {"projects": [{"slug": "questie", "projectID": 334372, "type": "optionalDependency"}]}
+# Dyre's Toolkit is required on CurseForge, as for every Dyre's AddOn, so the
+# app installs it; the TOC lists it as optional, so DQT still loads without it.
+RELATIONS = {"projects": [{"slug": "questie", "projectID": 334372, "type": "optionalDependency"},
+                          {"slug": "dyres-toolkit", "type": "requiredDependency"}]}
 
 
 class PublishError(Exception):
@@ -111,8 +114,8 @@ def load_artifact(artifact_dir, tag):
         if type(supplied) is not type(value) or supplied != value:
             raise PublishError(f"Release manifest {key} mismatch")
     if (verified["interface"] != 16001 or verified["game_version"] != "1.60.1"
-            or verified["target_build"] != 70338):
-        raise PublishError("Only Forever beta 1.60.1 / Interface 16001 / build 70338 is supported")
+            or verified["target_build"] != 70450):
+        raise PublishError("Only Forever beta 1.60.1 / Interface 16001 / build 70450 is supported")
     # Upload the held bytes, not a later read of a possibly replaced artifact.
     digest = hashlib.sha256(archive_bytes).hexdigest()
     if digest != verified["sha256"]:

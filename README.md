@@ -60,7 +60,8 @@ is dead, then:
 - **On a mob, also** (off by default): start attacking, or cast a spell you
   pick from your spellbook, such as Moonfire (Rank 1) to tag a mob. The list
   holds only harmful spells that cast in 1 second or less, rank by rank.
-  Never on an NPC.
+  Never on an NPC. The macro casts it with `/use [harm,nodead] Name(Rank N)`
+  (`/use` casts the spell like `/cast`, and is one letter shorter).
 
 ## Talking to NPCs and clicking quest objects
 
@@ -84,6 +85,15 @@ front of you.
 | `/dqt debug` | Prints the raw quest objectives and QuestieDB's answers |
 
 `/questtargeting` works the same, in case another AddOn uses `/dqt`.
+
+## Settings
+
+`/dqt` opens the settings. With **Dyre's Toolkit** installed (from
+CurseForge; the CurseForge app installs it with DQT), they are under
+Options > AddOns > Dyre's AddOns > Dyre's Quest Targeting, beside your other
+Dyre's AddOns, and the toolkit's minimap menu opens them too. Without it, DQT
+works the same, its settings are under Options > AddOns > Dyre's Quest
+Targeting, and chat says once at login where to get the toolkit.
 
 ## Without Questie
 
@@ -129,10 +139,9 @@ Questie is optional.
 
 ## Compatibility
 
-Built for Forever beta 1.60.1 (build 70338, Interface 16001). DQT checks the
-APIs it needs at login and stays off, saying why, if one is missing.
-
-Not yet verified in client: everything. TESTING.md lists the in-client checks.
+Built for Forever beta 1.60.1 (build 70450, Interface 16001) and played on
+that build. DQT checks the APIs it needs at login and stays off, saying why,
+if one is missing. TESTING.md lists the in-client checks.
 
 ## License
 
