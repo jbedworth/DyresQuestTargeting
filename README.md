@@ -144,6 +144,10 @@ Built for Forever beta 1.60.1 (build 70450, Interface 16001) and played on
 that build. DQT checks the APIs it needs at login and stays off, saying why,
 if one is missing. TESTING.md lists the in-client checks.
 
+## Support
+
+Dyre's AddOns are free. If you enjoy them, you can support them on Ko-fi: https://ko-fi.com/dyre_janelle
+
 ## License
 
 MIT. See LICENSE.

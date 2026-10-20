@@ -20,6 +20,7 @@ tested.
 | Screenshots | artwork/screenshots/ (none taken yet; see artwork/README.md) |
 | Source | https://github.com/jbedworth/DyresQuestTargeting |
 | Issues | https://github.com/jbedworth/DyresQuestTargeting/issues |
+| Donation | Ko-fi, https://ko-fi.com/dyre_janelle (the project's Donation field) |
 
 ## Summary
 
