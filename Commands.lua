@@ -1,7 +1,8 @@
 local _, DQT = ...
 
 local USAGE = "Use /dqt (settings), /dqt list, /dqt add [name], /dqt add_exact [name], /dqt remove [name], "
-    .. "/dqt reset, /dqt on, /dqt off, or /dqt debug."
+    .. "/dqt reset (the hit list), /dqt on, /dqt off (the macro), /dqt unlock, /dqt lock, /dqt reset_box, "
+    .. "or /dqt debug."
 local UNAVAILABLE = "Dyre's Quest Targeting is unavailable. Check the DQT login message."
 
 -- The first word is the command; add, add_exact, and remove take the rest of
@@ -19,6 +20,11 @@ local COMMANDS = {
     reset = {handler = "ResetAdded"},
     on = {handler = "TurnOn"},
     off = {handler = "TurnOff"},
+    -- The box: Dyre's Toolkit's one layout mode, as /mtf and /dbr unlock.
+    -- reset_box, because /dqt reset already clears the hit list.
+    unlock = {handler = "Unlock"},
+    lock = {handler = "Lock"},
+    reset_box = {handler = "ResetBox"},
     debug = {handler = "ReportDebug", always = true},
 }
 

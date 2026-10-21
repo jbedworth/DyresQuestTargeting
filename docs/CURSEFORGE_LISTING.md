@@ -48,6 +48,9 @@ Per-file changelogs need no manual text: each CI upload uses the version's
 - Optionally starts attacking, or casts a spell you pick from your spellbook (harmful, 1 second or less), such as a low rank you tag mobs with.
 - It never changes in combat: anything that changes then is written when combat ends.
 
+### The Quest Target box
+A rounded box with a thin gold edge (brown and gold by default, or black and gold) shows your focused quest, what the macro looks for (with drop rates in their own column), the names left out, and your hit list; hover over a cut-off row to read it all. Drag a hit list name to change its priority; a red X removes a name; two footer icons add your target (Shift-click for the exact name) and clear the hit list, in combat too. Click a title to fold its part, or the header's plus or minus to fold or open everything; two settings decide which parts start folded. Move it with `/dqt unlock`; set its width, maximum height, text size, and opacity, or turn it off. Clicks pass through it except on its icons and titles.
+
 ### Per character
 Each character has its own macro and its own hit list. Short of character macro slots? A setting uses one account-wide macro instead.
 
@@ -57,12 +60,13 @@ It follows the quest you focus in the game's quest log or map, or in Questie's t
 With Questie, two optional settings, **experimental and to be used with caution**: keep Questie's and the game's quest focus in sync, and point the TomTom arrow at the nearest of the mobs the macro looks for. Works best with both Questie and TomTom.
 
 ### Dyre's Toolkit
-The CurseForge app installs Dyre's Toolkit with it: one settings home and a minimap menu for all Dyre's AddOns. DQT still works without it.
+Needs Dyre's Toolkit 2.0 or later; the CurseForge app installs it with DQT: one settings home, one layout mode, and a minimap menu for all Dyre's AddOns.
 
 ### Commands
 - `/dqt` opens the settings; `/dqt list` lists what the macro targets, most wanted first, and why.
-- `/dqt add [name]`, `/dqt add_exact [name]`, `/dqt remove [name]`, `/dqt reset`.
+- `/dqt add [name]`, `/dqt add_exact [name]`, `/dqt remove [name]`, and `/dqt reset` (clears the hit list).
 - `/dqt on`, `/dqt off`: turn updating the macro on or off.
+- `/dqt unlock`, `/dqt lock`: move the Quest Target box (all Dyre's AddOns' frames, as `/dyre unlock`); `/dqt reset_box` puts the box back in its first place.
 - `/questtargeting` works the same, in case another AddOn uses `/dqt`.
 
 ### Talking to NPCs

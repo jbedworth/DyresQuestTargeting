@@ -100,7 +100,7 @@ end
 local function AddNpcs(group, npcs, source, detail)
     for _, npc in ipairs(npcs) do
         group[#group + 1] = {name = npc.name, id = npc.id, exact = true, source = source,
-            detail = npc.detail or detail}
+            detail = npc.detail or detail, rate = npc.rate, item = source == "drop" and detail or nil}
     end
 end
 
@@ -356,6 +356,10 @@ function DQT.FocusedQuest()
         end
     end
     quest.open = open
+    local focused = objectiveIndex and type(objectives) == "table" and objectives[objectiveIndex]
+    if type(focused) == "table" and type(focused.text) == "string" and focused.text ~= "" then
+        quest.objectiveText = focused.text
+    end
     if quest.complete then
         local finishers = db and db.quest.finishedBy(questID)
         if type(finishers) == "table" then

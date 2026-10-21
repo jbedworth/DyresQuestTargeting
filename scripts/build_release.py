@@ -20,7 +20,7 @@ from pathlib import Path
 
 
 ADDON = "DyresQuestTargeting"
-RUNTIME_FILES = ("Commands.lua", "Core.lua", "Quest.lua", "Macro.lua", "Options.lua")
+RUNTIME_FILES = ("Commands.lua", "Core.lua", "Quest.lua", "Macro.lua", "Box.lua", "Options.lua")
 TEXT_FILES = (ADDON + ".toc",) + RUNTIME_FILES + ("LICENSE",)
 PACKAGE_FILES = TEXT_FILES
 # Release metadata: the TOC Interface, CurseForge game version, and the build last

@@ -18,7 +18,7 @@
 
 ```sh
 lua5.1 tests/run.lua
-luac5.1 -p Commands.lua Core.lua Quest.lua Macro.lua Options.lua tests/run.lua
+luac5.1 -p Commands.lua Core.lua Quest.lua Macro.lua Box.lua Options.lua tests/run.lua tests/toolkit/*.lua
 python -m unittest discover -s tests -p 'test_*.py'
 ```
 
@@ -112,12 +112,83 @@ With `/dqt debug` for details:
 19. With other AddOns' settings dropdowns opened first (for example a Dyre's
     Sounds sound picker in Mage Tools Forever), DQT's three dropdowns still
     show their own choice (Skull, Triangle, Nothing), not a sound name.
+21. Quest Target box content: with no focused quest and an empty hit list it
+    is hidden; `/dqt unlock` shows it with "No focused quest". Focus a quest
+    in the quest log: the header is "<quest> (Focus)" on its dark inset, then
+    the targets most wanted first. Focus Objective in Questie: "<quest>
+    (Questie)" and "Objective: ...". A quest item: "drops <item>" with the
+    rate in the right column, or "-" where Questie has no rate. A complete
+    quest: "· ready to turn in" and the turn-in NPC. A quest with many long
+    names: "Not in the macro (255-letter limit)" lists the rest.
+22. Box hit list bar out of combat and in combat: a bar like the header
+    (same rounded inset, same height), also when folded: with names shown,
+    under the targets and over the names, the dark strip under the names;
+    hidden, right under the targets with no strip; with no names, under the
+    targets with the strip right under it; with
+    the plus at the left end, the X at the right end, "Hit list: N" in the
+    middle (the hit list's title; the list has no title row of its own), the icons just under the title's letter height; a click anywhere on the bar
+    but the icons (also the empty space beside them) shows or hides the names. Hover: the plus says "Add your target to
+    the hit list. Shift-click to match the exact name."; the X says "Clear
+    the hit list." A click on the plus adds your target (similar names), a
+    Shift-click the exact name, with the same chat line as `/dqt add`; a
+    row's red X removes that name; the footer X empties the list and greys
+    out. In combat the
+    box changes at once, chat says the macro updates after combat, and it
+    does; no "AddOn action blocked". With no target, chat says so.
+23. Box frame: while locked, clicks on the box, also on a target or hit list
+    row, reach the world (click a mob behind it); the footer icons, the red X,
+    the header, and the section titles still work. `/dqt unlock` (one
+    "Dyre:" line, no DQT line): drag it by the box, the header, or an icon;
+    `/dqt lock`. While locked, out of combat, Ctrl-drag the header: the box
+    moves and stays where dropped (no snapping), and it does not fold; a
+    plain click on the header still folds. `/dqt reset_box` puts it back; `/dqt off` and `/dqt on`
+    still only switch the macro. The look: a rounded panel with a thin gold
+    edge and clean corners, the header a darker rounded inset with the fold
+    button at its right, no close button; the red X and the plus and minus
+    show (textures, not missing letters); opacity fades the edges too.
+    "Style": "Black and gold" turns the panel near black with the header a
+    little lighter, at once, also in combat; "Brown and gold" turns it back;
+    `/reload` keeps the choice.
+27. Reorder: with three or more hit list names, drag the bottom one to the
+    top: while dragging it dims and a thin gold line shows where it goes;
+    after the drop it is first, and `/macro` shows its line last in the
+    macro (it wins). Drag a name up onto the bar, the targets, or the
+    header: the gold line stays at the top, and it goes first; anywhere
+    below the names, over the dark strip: it goes last. Drop outside the
+    box: nothing changes.
+    In combat: the box changes at once, chat says "Moved <name> in your hit
+    list. The macro updates after combat.", and it does. The red X still
+    removes; a target row cannot be dragged and still lets clicks through.
+24. Box knobs and size: the box grows when a name is added and shrinks when
+    one is removed or a section folds, its top edge in place. Text size
+    changes only the text; Width and Max height change only the box (a long
+    list stops at Max height and ends with "+N more: /dqt list shows all").
+    Open, an empty dark strip sits under the hit list's names (right under
+    its bar when there are none; none when the hit list is folded). "Reset size"
+    restores Width, Max height, and Text size, not Opacity.
+25. Cut text: make the box narrow; a long row ends with "..." and hovering
+    over it shows the whole text in a tooltip; the rate column stays whole.
+    The tooltip says "drops <item>, 30.3% drop rate", or "drop rate
+    unknown" where the column shows "-". A long quest name in the header
+    stops before the fold button, with "..."; hovering over the header always
+    shows "Dyre's Quest Targeting" in gold, then the whole header line.
+26. Folding: click the quest's name in the header: the quest's rows hide
+    (the objective line stays) and the box shrinks, its top edge in place;
+    click again to open. Click "Targets": it folds to its title (with its
+    count). Click "Hit list: N" in its bar: the names hide and the bar says
+    "(hidden)". The minus at the header's right end folds all: a compact
+    card (header bar, objective line, hit list bar, evenly spaced; check both
+    Styles and Text size 80% and 150%), the button turns to a plus; the plus
+    opens all, every section. "Start the quest targets folded" and "Start
+    the hit list folded" (under "Show the Quest Target Box", before
+    "Style"): `/reload` with each on and off; by default the quest's part
+    opens and the hit list starts folded. `/reload` keeps the "Targets"
+    fold.
 20. With Dyre's Toolkit: the AddOn list shows DQT under Dyre's Toolkit; the
-    settings page is under Options > AddOns > Dyre's AddOns, with the Questie
-    section heading; `/dqt` and the toolkit's minimap menu open it; no install
-    line in chat. Disable the toolkit and `/reload`: DQT is at the top of the
-    AddOn list again (Quests), its page is at the top level, and chat says
-    once to install Dyre's Toolkit from CurseForge.
+    settings page is Options > AddOns > Dyre's AddOns > Quest Targeting, with
+    the Questie and Quest Target Box section headings; `/dqt` and the
+    toolkit's minimap menu open it; no toolkit line in chat. Disable the
+    toolkit: the AddOn list says DQT needs it, and DQT does not load.
 18. `/dqt` opens the settings page; in combat it says it opens out of combat
     and opens nothing. `/dqt list` works in and out of combat.
 17. "Use an account-wide macro" on: "! Target (DQT)" appears in the General

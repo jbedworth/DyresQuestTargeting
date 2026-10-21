@@ -26,6 +26,7 @@ local MAX_OPENER_CAST_MS = 1000
 -- Shown in both Questie settings' tooltips, under their own section heading.
 local EXPERIMENTAL = " Experimental: it uses Questie's own code, not a public API. Use with caution."
 local QUESTIE_HEADING = "Questie Synchronization (Experimental)"
+local BOX_HEADING = "Quest Target Box"
 
 -- Harmful and fast enough to open with. Without the spell APIs, every spell
 -- counts, as before; a value that may be secret never counts.
@@ -169,6 +170,15 @@ local function Marker(variable, name, key, default, tooltip)
     return Dropdown(setting, MarkerChoices, tooltip)
 end
 
+-- A section heading, as Blizzard's Controls page adds them
+-- (Blizzard_SettingControls.lua); without it the names still say what they are.
+local function Heading(text)
+    if type(CreateSettingsListSectionHeaderInitializer) == "function" and type(layout) == "table"
+            and type(layout.AddInitializer) == "function" then
+        layout:AddInitializer(CreateSettingsListSectionHeaderInitializer(text))
+    end
+end
+
 function DQT.InitializeOptions()
     if not HasSettingsAPI() then
         return
@@ -212,12 +222,8 @@ function DQT.InitializeOptions()
             .. "account-wide macro, for when character slots run short; DQT rewrites it for whichever character "
             .. "is logged in. Not for playing two characters at once: they would rewrite it in turn. After "
             .. "switching, put the new macro on your bars and delete the old one.")
-    -- A section heading, as Blizzard's Controls page adds them
-    -- (Blizzard_SettingControls.lua); without it the names still say experimental.
-    if type(CreateSettingsListSectionHeaderInitializer) == "function" and type(layout) == "table"
-            and type(layout.AddInitializer) == "function" then
-        layout:AddInitializer(CreateSettingsListSectionHeaderInitializer(QUESTIE_HEADING))
-    end
+    -- Without headings, the names still say experimental.
+    Heading(QUESTIE_HEADING)
     Flag("DQT_SYNC_FOCUS", "Keep Questie's and the game's focus in sync (experimental)", "syncFocus", false,
         "With Questie installed: focusing a quest in Questie's tracker also focuses it in the game's quest "
             .. "log and map, and the other way round. A Questie objective focus gives the game its quest. "
@@ -236,6 +242,42 @@ function DQT.InitializeOptions()
             .. "the macro looks for (the best droppers, for a quest item), or at the turn-in once the quest is "
             .. "done. It moves when the focused quest or objective changes, an objective is done, or the quest "
             .. "is ready to turn in." .. EXPERIMENTAL)
+    Heading(BOX_HEADING)
+    Flag("DQT_SHOW_BOX", "Show the Quest Target Box", "showBox", true,
+        "A box with your focused quest, what the macro looks for (with drop rates), the names left out, and your "
+            .. "hit list, with buttons to add your target or remove names. It hides when there is nothing to show. "
+            .. "Move it with /dqt unlock.")
+    Flag("DQT_START_QUEST_FOLDED", "Start the quest targets folded", "startQuestFolded", false,
+        "At login, the quest's part of the box (its targets) starts folded under the quest's name. During "
+            .. "play, a click on the quest's name folds or opens it.")
+    Flag("DQT_START_HIT_LIST_FOLDED", "Start the hit list folded", "startHitListFolded", true,
+        "At login, the hit list starts folded: only its \"Hit list\" bar shows. During play, a click on "
+            .. "that bar folds or opens it. The button at the header's right folds or opens all.")
+    local style = Proxy("DQT_BOX_STYLE", Settings.VarType.String, "Style", DQT.DEFAULT_BOX_STYLE,
+        function() return DQT.db.boxStyle end,
+        function(value)
+            if DQT.BOX_STYLES[value] then
+                DQT.db.boxStyle = value
+                DQT.ApplyBoxStyle()
+            end
+        end)
+    Dropdown(style, function()
+        local container = Settings.CreateControlTextContainer()
+        for _, key in ipairs(DQT.BOX_STYLE_ORDER) do
+            container:Add(key, DQT.BOX_STYLES[key].label)
+        end
+        return container:GetData()
+    end, "The box's colors: a brown or a near-black panel, both with a gold edge and gold titles.")
+    local toolkit = DQT.Toolkit()
+    if DQT.box and toolkit and type(toolkit.AddWidgetSettings) == "function" then
+        toolkit.AddWidgetSettings(category, layout, DQT.box, {
+            labels = {height = "Max height"},
+            tooltips = {
+                height = "The most the box grows to. It grows and shrinks with what it shows; a longer list is "
+                    .. "cut, and its last row says how many more (/dqt list shows all).",
+                textSize = "The size of the text only; the box keeps its size, and fewer rows fit at bigger text."},
+            resetTooltip = "Back to its own width, height, and text size. Opacity stays as it is."})
+    end
     if topLevel then
         Settings.RegisterAddOnCategory(category)
     end

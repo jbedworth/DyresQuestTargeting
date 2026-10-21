@@ -165,27 +165,143 @@ setting names, a caution in their tooltips, README, CHANGELOG, and listing.
   checked). They run after the macro is written, so a Questie change cannot
   stop the macro. Not confirmed in client.
 
-### With Dyre's Toolkit (built; author-approved, 2026-10-19)
+### With Dyre's Toolkit (built; author-approved, 2026-10-19; required 1.1.0)
 
 Dyre's Toolkit (`DyresToolkit`, its own repository, owned by the coordinating
-session; do not edit it here) gives Dyre's AddOns one settings home and a
-minimap menu. DQT has no movable frames, so it only joins those.
+session; do not edit it here) gives Dyre's AddOns one settings home, a
+minimap menu, and widgets (contract 2). The Quest Target box is a widget.
 
-- TOC: `## OptionalDeps` lists `DyresToolkit` (never `## Dependencies`, so
-  DQT loads without it) and `## Group: DyresToolkit` nests DQT under the
-  toolkit in the in-game AddOn list. CurseForge uploads list `dyres-toolkit`
+- TOC: `## Dependencies: DyresToolkit` (required since 1.1.0, for the box,
+  as every Dyre's AddOn with frames) and `## Group: DyresToolkit` nests DQT
+  under the toolkit in the in-game AddOn list. CurseForge uploads list `dyres-toolkit`
   as a required dependency, so the app installs it; Questie (334372) and
   TomTom (18808) are optional dependencies (author: "Works best with both").
   TomTom is not in the TOC: DQT reads `_G.TomTom` only when it points, after
   login, never at load time.
-- When `DyresToolkit.RequireContract(1)` returns the toolkit, Core calls
+- When `DyresToolkit.RequireContract(2)` returns the toolkit, Core calls
   `RegisterAddOn` (addon, title, `openSettings = DQT.OpenSettings`) and
   Options makes the page with `RegisterSettingsCategory`, under "Dyre's
   AddOns", with the same settings and Questie section heading. `/dqt` still
   opens DQT's own page.
-- Otherwise (no toolkit, a newer contract, or no page from it), the
-  top-level page as before. With no toolkit at all, one chat line at login
-  names CurseForge as the place to install it.
+- Otherwise (an older toolkit, or no page from it), the macro works as
+  before with a top-level page and no box, and one chat line at login says
+  to install or update Dyre's Toolkit from CurseForge.
+
+### The Quest Target box (built 1.1.0; author-approved design, 2026-10-20)
+
+- A toolkit widget (Box.lua, key `box`, saved in `db.box`; the toolkit owns
+  its place, dragging, width, height, opacity, and mouse). Plain frames and
+  buttons, nothing secure, so nothing is protected.
+- Look (author: "really, just round the rectangle"; reference: a modern
+  panel with rounded corners, a thin edge, and a header with the title left
+  and icon buttons right): a rounded panel with a thin gold edge
+  (UI-Tooltip-Background, UI-Tooltip-Border, edge 14), and the header as its
+  own rounded inset panel (the same textures, edge 10, a gold edge at 60%),
+  the quest name left and the fold button right; no close button. Built-in
+  textures only. "Style" (`db.boxStyle`, a dropdown; repaired on load):
+  "Brown and gold" (default; panel 0.28, 0.16, 0.07, 0.85, header 0.10,
+  0.06, 0.02) or "Black and gold" (panel 0.05, 0.05, 0.06, 0.9, header
+  slightly lighter, 0.13, 0.13, 0.14, so it reads); gold edges and titles in
+  both. A change only re-colors, so it applies at once, also in combat. The
+  author chose brown as the default: "it's classic". Opacity fades the whole box.
+- Header (author): one line, "<quest> (Questie)" or "<quest> (Focus)", plus
+  " · ready to turn in"; "No focused quest"; "Macro off: ..." when DQT is
+  off. Under it, "Objective: <text>" for a Questie objective focus.
+- Sections, each title with its count: "Targets, most wanted first" (kill
+  objective, "drops <item>", turn-in); "Not in the macro (255-letter
+  limit)"; then the hit list, with no title row (the footer bar is its
+  title, author), newest first, each "exact" or "similar" with a red X
+  (`UI-GroupLoot-Pass-Up`; the game font has no "✕"). Targets and left-out
+  names have a right-aligned rate column ("30.3%", or "-" with no rate), so
+  the rate is never the part cut off. The tooltip says the rate in words:
+  "drops <item>, 30.3% drop rate", or "drop rate unknown" for a dropper
+  without one; a kill or turn-in names no drop rate.
+- Footer (author: icons, always visible, "boxed similar to the header"): a
+  hit list bar, the same rounded inset panel as the header and as tall. A
+  click anywhere on it but its icons folds or opens the hit list (author:
+  as on every section title); the icons sit above it. It is the hit list's
+  title (author): with names shown, it sits under the quest rows and over
+  its names, and the empty strip goes under the names; with the hit list
+  folded, no strip (author: nothing to drop on), the bar right under the
+  quest rows; with no names, the strip right under the bar, in its own
+  section (author: it shows that names could go there).
+  Every part is placed from the box's top, as the box grows and shrinks. Add at
+  its left end and Clear at its right end (author), each inset as the fold
+  button; between them the hit list's title, "Hit list: N" in gold
+  (" (hidden)" when folded), a button: a click folds or opens the hit list
+  (tooltip "Show or hide the hit list."). Icons and the fold button are 1.4 text sizes: the
+  textures have a clear margin, so the mark shows just under the title's
+  letters (author: "slightly smaller than the title text"). Folded, the box
+  is a compact card: border, header bar, gap, objective line, gap, footer
+  bar, border. Add (the plus texture): a click
+  adds your target with similar names, a Shift-click the exact name; tooltip
+  "Add your target to the hit list. Shift-click to match the exact name."
+  Clear (the red X texture): clears the hit list (no question asked, no
+  popup); disabled and desaturated when empty; tooltip "Clear the hit
+  list."
+- Reordering (author): drag a hit list row up or down to change its
+  priority; the target rows keep their order (drop rate order). The box
+  shows the most wanted first; `db.added` keeps it last (`DQT.MoveAdded`
+  maps the box's place to the saved one). Hit list rows take clicks (to
+  start the drag) and are not drag handles of the box. While dragging, the
+  row dims and a thin gold line shows the drop place, placed by an
+  `OnUpdate` set only for the drag (on its start, cleared on its stop; not
+  idle). The drop area is the whole box (author): anywhere above the first
+  name (the bar, the targets, the header too) puts the name first, anywhere
+  below the last name puts it last; only a drop outside the box cancels. The macro rebuilds as for add and
+  remove; in combat the list changes at once and chat says "Moved <name> in
+  your hit list. The macro updates after combat." Only the shown rows take
+  part: a name past "+N more" or in a folded section is not reached (make
+  the box taller, or `/dqt add` it again to make it the most wanted).
+- No title bar (author: "keep it clean"): hovering over the header shows a
+  tooltip with "Dyre's Quest Targeting" in gold, then the whole header line.
+- Cut text (author): a row whose text is cut ("...") shows the whole text
+  in a tooltip on mouse-over (`FontString:IsTruncated`). Rows take the
+  mouse-over only (`SetMouseClickEnabled(false)`), so clicks pass through
+  them to the world; the footer icons, the red X, the header, the section
+  titles, and the hit list rows take clicks.
+- Folding (author: "clicking the section titles should expand/collapse that
+  section; the +/- at the top should expand/collapse all"): the header, the
+  quest's title, folds the quest's part (its sections; the objective line
+  stays); a section title folds that section; "Hit list" in the hit list
+  bar folds the hit list. The fold button at the header's right end (plus
+  or minus, text height; the header text stops before it, cut with a
+  tooltip) folds all (the quest's part and the hit list) or, when all are
+  folded, opens all (every section). All folded, the box is a compact card:
+  the header bar, the objective line, and the hit list bar. Saved by key in
+  `db.box.foldedSections` (quest, targets, dropped, added). Two settings
+  (author) decide at login and `/reload`: "Start the quest targets folded"
+  (`db.startQuestFolded`, default off) and "Start the hit list folded"
+  (`db.startHitListFolded`, default on); the targets and left-out sections
+  keep their saved folds. A 1.1.0 test build's `db.startFolded` becomes
+  `db.startQuestFolded`. On the settings page, under "Quest Target Box":
+  "Show the Quest Target Box", then the two fold switches, then "Style". The box keeps its top edge
+  (`SetContentSize(width, height, "TOP")`, toolkit 2.1.0) and grows and
+  shrinks with its content (author), up to Max height.
+- The buttons call the `/dqt add`, `add_exact`, `remove`, and `reset` code,
+  in combat too (author's choice): the hit list changes at once, the macro
+  updates after combat, with the same chat line. The target name goes
+  through the same secret check.
+- Settings (author: "two knobs working against each other" otherwise): Width
+  (180 to 400) and Max height (120 to 600) in pixels, and Text size (80 to
+  150%), which changes only the font; no Size (scale) and no Lines. The rows
+  that fit under Max height are its room divided by the row height, so a
+  taller maximum shows more rows and bigger text fewer.
+- Open, an empty strip half a bar tall (author: room to drop a dragged name
+  last), under the hit list's names, or right under its bar when there are
+  none; none when the hit list is folded: the bars' dark fill, no edge (an edge
+  does not fit its height), no text. "Show the Quest Target
+  Box" (`db.showBox`, default on), Opacity; "Reset size" restores Width,
+  Height, and Text size, and keeps Opacity. A long list is cut: rows are
+  shared out between open sections one at a time, and a cut section's last
+  row is "+N more: /dqt list shows all".
+- Shown when on, and frames are unlocked or there is a focused quest or a
+  hit list; DQT off shows it only unlocked. The box itself takes clicks only
+  while unlocked (toolkit mouse "unlocked"); the header and the footer icons
+  are drag handles, so a Ctrl-drag on them moves the box while locked
+  (toolkit 2.2.0's free move, family-wide, author-approved). A press that
+  became a drag is not a click (it does not fold, add, or clear). Redrawn at the end of each rebuild and on unlock; no
+  polling.
 
 ### Commands
 
@@ -193,7 +309,10 @@ minimap menu. DQT has no movable frames, so it only joins those.
   so), as `/dqt options` does. `/dqt list` lists the focused quest, the names
   most wanted first with where each came from (and drop rates), names left
   out, and whether QuestieDB is loaded. `add`, `add_exact`, `remove`,
-  `reset`, `on`, `off`, `debug` (runs even when DQT is unavailable). Backup slash `/questtargeting`; a clash on `/dqt` is
+  `reset` (the hit list), `on`, `off` (the macro switch), `unlock` and `lock`
+  (the toolkit's `Unlock`/`Lock`, as `/mtf` and `/dbr`: the toolkit's one
+  `Dyre:` line, no DQT line), `reset_box` (`ResetWidgets`; not `reset`, which
+  already clears the hit list), `debug` (runs even when DQT is unavailable). Backup slash `/questtargeting`; a clash on `/dqt` is
   reported once at login.
 
 ### Later (discussed, not agreed to build)
@@ -207,11 +326,15 @@ minimap menu. DQT has no movable frames, so it only joins those.
 ## Project structure
 
 - Runtime files: DyresQuestTargeting.toc, Commands.lua, Core.lua, Quest.lua,
-  Macro.lua, Options.lua, loaded in that order. Commands parses `/dqt`; Core
+  Macro.lua, Box.lua, Options.lua, loaded in that order. Commands parses `/dqt`; Core
   owns saved settings and their repair, the login banner, install and API
   checks, slash conflict reporting, the hit list, refresh scheduling, joining
   Dyre's Toolkit, and startup; Quest builds the focused quest's names; Macro builds and writes the
-  macro; Options owns the settings page and the spellbook list.
+  macro; Box draws the Quest Target box; Options owns the settings page and
+  the spellbook list.
+- tests/toolkit holds a copy of Dyre's Toolkit's Core, Layout, Widgets, and
+  Settings files, which the suite loads; a test fails when the copy differs
+  from ../DyresToolkit. Copy them again after a toolkit change.
 - artwork/ holds the logo (SVG source, 1024 and 512 PNG renders) and
   screenshots/ for listings; it is never packaged.
 - tests/run.lua holds the Lua 5.1 mock suite. tests/test_*.py cover the
@@ -294,7 +417,7 @@ minimap menu. DQT has no movable frames, so it only joins those.
   player-facing changes; the builder puts it at the top of release-notes.md
   and fails without it.
 - Package only DyresQuestTargeting.toc, Commands.lua, Core.lua, Quest.lua,
-  Macro.lua, Options.lua, and LICENSE under the top-level
+  Macro.lua, Box.lua, Options.lua, and LICENSE under the top-level
   `DyresQuestTargeting/` folder, named
   `DyresQuestTargeting-<version>-forever.zip`, with the builder's
   BigWigs-format `release.json` (flavor `forever`) attached for WowUp.

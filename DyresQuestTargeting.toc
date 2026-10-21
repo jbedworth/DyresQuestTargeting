@@ -2,10 +2,11 @@
 ## Title: Dyre's Quest Targeting
 ## Notes: Keeps a targeting macro, "! Target (DQT)", built from your focused quest in WoW Forever
 ## Author: Dyre
-## Version: 1.0.0
+## Version: 1.1.0
 ## IconTexture: Interface\Icons\Ability_Hunter_SniperShot
 ## Category: Quests
-## OptionalDeps: QuestieDB, Questie, DyresToolkit
+## Dependencies: DyresToolkit
+## OptionalDeps: QuestieDB, Questie
 ## Group: DyresToolkit
 ## SavedVariablesPerCharacter: DyresQuestTargetingDB
 
@@ -13,4 +14,5 @@ Commands.lua
 Core.lua
 Quest.lua
 Macro.lua
+Box.lua
 Options.lua

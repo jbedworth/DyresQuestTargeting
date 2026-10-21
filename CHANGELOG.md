@@ -3,6 +3,19 @@
 Player-facing changes for each Dyre's Quest Targeting release, newest first. The
 release builder puts the matching section at the top of each release's notes.
 
+## 1.1.0
+
+### Features
+
+- The Quest Target box shows your focused quest in its header ("(Questie)" or "(Focus)"), the objective you focused in Questie, what the macro looks for (most wanted first, with each quest item and its drop rate in its own column), the names left out of the macro, and your hit list. Hover over a cut-off row to read all of it.
+- Change the hit list from the box: drag a name up or down to change its priority; a red X removes a name; in the footer bar, which always shows (with the hit list's count), the plus adds your target (Shift-click for the exact name) and the red X clears the list. They work in combat too; the macro updates when combat ends.
+- Click a title to fold or open its part: the quest's name in the header, a section title, or "Hit list" in its bar; the plus or minus at the header's right end folds or opens everything. The box grows and shrinks to fit, keeping its top edge. "Start the quest targets folded" (off by default) and "Start the hit list folded" (on by default) decide how it starts at login.
+- The box is a rounded panel with a thin gold edge and a darker rounded header; "Style" picks brown and gold (the default) or black and gold. Ctrl-drag its header to move it without unlocking, or move it with `/dqt unlock` and `/dqt lock` (the same as `/dyre unlock` and `/dyre lock`), or put it back with `/dqt reset_box`. Its width, maximum height, text size, and opacity are settings, and the box size and text size are independent. "Show the Quest Target Box" turns it off. It hides when there is nothing to show, and lets clicks through except on its icons, header, and section titles.
+
+### Other changes
+
+- Dyre's Toolkit 2.0 or later is now required (the CurseForge app installs it). With an older toolkit, the macro still works, without the box, and chat says to update it.
+
 ## 1.0.0
 
 The first full release for WoW: Forever, no longer marked beta: it was play tested on the Forever beta client 1.60.1, build 70450. CurseForge now offers it as a release, so the app updates it and installs what it needs for every player.

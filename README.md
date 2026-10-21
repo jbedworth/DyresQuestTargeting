@@ -80,21 +80,62 @@ front of you.
 | `/dqt add [name]` | Adds a name; anything containing it matches |
 | `/dqt add_exact [name]` | Adds a name; only that exact name matches |
 | `/dqt remove [name]` | Takes one name off your hit list |
-| `/dqt reset` | Clears your hit list |
+| `/dqt reset` | Clears your hit list (the box stays where it is; `/dqt reset_box` moves it back) |
 | `/dqt on`, `/dqt off` | Turns updating the macro on or off; off leaves it as it is |
+| `/dqt unlock`, `/dqt lock` | Unlocks or locks frames to move the Quest Target box, as `/dyre unlock` and `/dyre lock` do for every Dyre's AddOn |
+| `/dqt reset_box` | Puts the Quest Target box back in its first place |
 | `/dqt options` | Opens the settings, as `/dqt` does |
 | `/dqt debug` | Prints the raw quest objectives and QuestieDB's answers |
 
 `/questtargeting` works the same, in case another AddOn uses `/dqt`.
 
+## The Quest Target box
+
+A rounded box with a thin gold edge (on by default) shows what the macro
+does. Its header names your
+focused quest and how it is focused, "(Questie)" or "(Focus)"; under it is
+the objective you focused in Questie. Then the names the macro looks for,
+most wanted first, with each quest item and, in its own column, the drop
+rate ("-" when Questie has no rate), the names left out of the macro's 255
+letters, and your hit list. Hover over a cut-off row ("...") to read all of
+it.
+
+Each hit list name has a red X to remove it; drag a name up or down to
+change its priority (the top one is the most wanted). The targets stay in
+their own order, best drop rate first. The "Hit list" bar is the hit
+list's title: its names show under it. It always shows, also when the box
+is folded: the plus on the left adds your
+target
+(Shift-click for the exact name), the red X on the right clears the hit
+list, and the middle shows how many names it has. They
+work in combat too:
+the box changes at once and the macro updates when combat ends. Click a title
+to fold or open its part: the quest's name in the header, a section title,
+or "Hit list" in its bar. The plus or minus at the header's right end folds
+or opens everything. Two settings decide how the box starts at login:
+"Start the quest targets folded" (off by default) and "Start the hit list
+folded" (on by default). The box lets clicks through to the
+world, except on its icons, header, section titles, and hit list names. It hides when
+there is nothing to show.
+
+Ctrl-drag the header to move the box without unlocking (out of combat;
+it drops where you let go, with no snapping). Or move it with
+`/dqt unlock` (or `/dyre unlock`), then `/dqt lock`;
+`/dqt reset_box` puts it back. "Style" picks brown and gold (the default) or black and
+gold. The box grows and shrinks with what it shows, up to Max height in
+DQT's settings; Width sets its width and Text size only the text: a taller
+maximum shows more rows, bigger text fewer. A long list is cut, and its last row says how many more
+(`/dqt list` shows all). Opacity, and "Show the Quest Target Box" turns it
+off.
+
 ## Settings
 
-`/dqt` opens the settings. With **Dyre's Toolkit** installed (from
-CurseForge; the CurseForge app installs it with DQT), they are under
-Options > AddOns > Dyre's AddOns > Dyre's Quest Targeting, beside your other
-Dyre's AddOns, and the toolkit's minimap menu opens them too. Without it, DQT
-works the same, its settings are under Options > AddOns > Dyre's Quest
-Targeting, and chat says once at login where to get the toolkit.
+`/dqt` opens the settings: Options > AddOns > Dyre's AddOns > Quest
+Targeting, beside your other Dyre's AddOns; the toolkit's minimap menu opens
+them too. DQT needs **Dyre's Toolkit** 2.0 or later (the CurseForge app
+installs it with DQT). With an older toolkit, the macro still works, its
+settings are under Options > AddOns > Dyre's Quest Targeting, there is no
+box, and chat says once at login to update the toolkit from CurseForge.
 
 ## Without Questie
 

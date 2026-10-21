@@ -10,10 +10,12 @@ local SLASH_KEY = "DYRESQUESTTARGETING"
 local PRIMARY_SLASH = "/dqt"
 local BACKUP_SLASH = "/questtargeting"
 local MAX_SLASH_ALIASES = 10
--- Dyre's Toolkit: the shared settings home and minimap menu for Dyre's
--- AddOns (its AGENTS.md, "The interface"). Optional; DQT works without it.
-local TOOLKIT_CONTRACT = 1
-local TOOLKIT_HINT = "Install Dyre's Toolkit from CurseForge for one settings home for all Dyre's AddOns."
+-- Dyre's Toolkit: the shared settings home, minimap menu, and widgets for
+-- Dyre's AddOns (its AGENTS.md, "The interface" and "Widgets"). Required in
+-- the TOC; with an older one, the macro still works, without the box.
+-- Contract 2 has the widgets the Quest Target box needs.
+local TOOLKIT_CONTRACT = 2
+local TOOLKIT_HINT = "The Quest Target box needs Dyre's Toolkit 2.0 or later: install or update it from CurseForge."
 -- Quest events come in bursts (QUEST_LOG_UPDATE fires several times a
 -- second while you fight); one rebuild covers each burst.
 local REFRESH_DELAY = 0.2
@@ -65,17 +67,43 @@ local function Metadata(field)
     end
 end
 
--- Joins the toolkit's minimap menu; without the toolkit, says once (at login)
--- where to get it.
+-- Joins the toolkit's minimap menu; without a toolkit DQT can use, says
+-- once (at login) where to get it.
 local function JoinToolkit()
     local toolkit = DQT.Toolkit()
     if toolkit then
         if type(toolkit.RegisterAddOn) == "function" then
             toolkit.RegisterAddOn({addon = addonName, title = DEFAULT_TITLE, openSettings = DQT.OpenSettings})
         end
-    elseif DyresToolkit == nil then
+    else
         DQT.Report(TOOLKIT_HINT)
     end
+end
+
+-- /dqt unlock and /dqt lock: the toolkit's one layout mode for every Dyre's
+-- AddOn; the toolkit says the one line. /dqt reset_box: the box's first place.
+local function WithToolkit(action)
+    local toolkit = DQT.Toolkit()
+    if not toolkit then
+        DQT.Report(TOOLKIT_HINT)
+        return
+    end
+    action(toolkit)
+end
+
+function DQT.Unlock()
+    WithToolkit(function(toolkit) toolkit.Unlock() end)
+end
+
+function DQT.Lock()
+    WithToolkit(function(toolkit) toolkit.Lock() end)
+end
+
+function DQT.ResetBox()
+    WithToolkit(function(toolkit)
+        toolkit.ResetWidgets(addonName)
+        DQT.Report("The Quest Target box is back in its first place.")
+    end)
 end
 
 local function ReportLoaded(available)
@@ -98,7 +126,7 @@ end
 local REQUIRED_NAMESPACE = {"ParseCommand", "HandleCommand", "FocusedQuest", "GameFocusChanged", "WorldLoading",
     "WorldEntered", "HookQuestieFocus", "SyncFocus", "PointTomTom",
     "ReportQuestDebug", "BuildMacro",
-    "WriteMacro", "FlushMacro", "ReportMacroDebug", "InitializeOptions", "OpenSettings"}
+    "WriteMacro", "FlushMacro", "ReportMacroDebug", "CreateBox", "UpdateBox", "InitializeOptions", "OpenSettings"}
 -- Client APIs the macro needs; checked, never the client version.
 local REQUIRED_APIS = {
     {"C_SuperTrack", "GetSuperTrackedQuestID"}, {"C_QuestLog", "GetQuestObjectives"},
@@ -211,6 +239,37 @@ function DQT.SanitizeDB(db)
     db.mobMarker = SanitizeMarker(db.mobMarker, DQT.DEFAULT_MOB_MARKER)
     db.npcMarker = SanitizeMarker(db.npcMarker, DQT.DEFAULT_NPC_MARKER)
     db.added = SanitizeAdded(db.added)
+    if type(db.showBox) ~= "boolean" then
+        db.showBox = true
+    end
+    -- At login: the quest's part open, the hit list folded (author). A 1.1.0
+    -- test build's one "Start folded" becomes the quest's.
+    if type(db.startQuestFolded) ~= "boolean" then
+        db.startQuestFolded = db.startFolded == true
+    end
+    if type(db.startHitListFolded) ~= "boolean" then
+        db.startHitListFolded = true
+    end
+    db.startFolded = nil
+    if not DQT.BOX_STYLES[db.boxStyle] then
+        db.boxStyle = DQT.DEFAULT_BOX_STYLE
+    end
+    -- The Quest Target box's place and sizes; the toolkit repairs the numbers.
+    if type(db.box) ~= "table" then
+        db.box = {}
+    end
+    -- Which sections are folded (by key); "folded" was a 1.1.0 test build's.
+    db.box.folded = nil
+    if type(db.box.foldedSections) ~= "table" then
+        db.box.foldedSections = {}
+    end
+    for key, value in pairs(db.box.foldedSections) do
+        if value ~= true then
+            db.box.foldedSections[key] = nil
+        end
+    end
+    -- Sizes from a 1.1.0 test build: the box is now Width and Height.
+    db.box.scale, db.box.lines = nil, nil
     db.hidden = nil -- quest names hidden by a test build; hiding is on hold
     return db
 end
@@ -292,6 +351,7 @@ function DQT.Refresh()
     -- Off leaves the macro as it is.
     if not DQT.db.enabled then
         DQT.current = nil
+        DQT.UpdateBox()
         return
     end
     local quest = DQT.FocusedQuest()
@@ -313,6 +373,7 @@ function DQT.Refresh()
     -- After the macro, so a change in Questie's private code cannot stop it.
     DQT.SyncFocus()
     DQT.PointTomTom(quest, built.kept)
+    DQT.UpdateBox()
 end
 
 local refreshScheduled = false
@@ -404,6 +465,23 @@ function DQT.RemoveName(argument)
     AfterChange("Removed " .. removed.name .. " from your hit list.")
 end
 
+-- A hit list name to a new place, counted as the box shows the list: 1 is
+-- the most wanted, which db.added keeps last (the last line wins).
+function DQT.MoveAdded(name, position)
+    local index = FindAdded(name)
+    if not index then
+        return
+    end
+    local entry = table.remove(DQT.db.added, index)
+    local count = #DQT.db.added
+    position = math.max(1, math.min(count + 1, position))
+    table.insert(DQT.db.added, count + 2 - position, entry)
+    DQT.Refresh()
+    if InCombatLockdown() then
+        DQT.Report("Moved " .. entry.name .. " in your hit list. The macro updates after combat.")
+    end
+end
+
 function DQT.ResetAdded()
     local count = #DQT.db.added
     DQT.db.added = {}
@@ -431,8 +509,12 @@ local SOURCE_TEXT = {
     added = "hit list",
 }
 
+function DQT.SourceText(target)
+    return SOURCE_TEXT[target.source] or target.source
+end
+
 local function Describe(target)
-    local text = target.name .. " (" .. (SOURCE_TEXT[target.source] or target.source)
+    local text = target.name .. " (" .. DQT.SourceText(target)
     if target.detail then
         text = text .. ": " .. target.detail
     end
@@ -559,6 +641,8 @@ events:SetScript("OnEvent", function(self, event, firstArg)
     end
     -- Called here rather than from each file's own PLAYER_LOGIN handler, so
     -- startup never depends on event handler order.
+    -- The box first: its size settings go on the settings page.
+    DQT.CreateBox()
     DQT.InitializeOptions()
     JoinToolkit()
     for _, name in ipairs(QUEST_EVENTS) do

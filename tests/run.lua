@@ -30,7 +30,14 @@ local function lacks(actual, fragment, context)
 end
 
 local ADDON = "DyresQuestTargeting"
-local RUNTIME_FILES = {"Commands.lua", "Core.lua", "Quest.lua", "Macro.lua", "Options.lua"}
+local RUNTIME_FILES = {"Commands.lua", "Core.lua", "Quest.lua", "Macro.lua", "Box.lua", "Options.lua"}
+-- Dyre's Toolkit's files the tests load (a copy in tests/toolkit, checked
+-- against ../DyresToolkit when that folder is there). Not the minimap, which
+-- needs the embedded libraries.
+local TOOLKIT_FILES = {"Core.lua", "Layout.lua", "Widgets.lua", "Settings.lua"}
+local PAGE = "Dyre's Quest Targeting"
+-- Under "Dyre's AddOns", the toolkit says "Dyre's " once (its ShortName).
+local SHORT_PAGE = "Quest Targeting"
 local MACRO = "! Target (DQT)"
 local OLD_MACRO = "! Quest Targets"
 local ACCOUNT_SLOTS, CHARACTER_SLOTS = 120, 30
@@ -249,6 +256,8 @@ local function fixture(options)
     end
 
     -- The player's target.
+    env.IsShiftKeyDown = function() return state.shift == true end
+    env.GetCursorPosition = function() return state.cursorX or 0, state.cursorY or 0 end
     env.UnitExists = function(unit) equal(unit, "target") return state.target ~= nil end
     env.UnitName = function(unit) equal(unit, "target") return state.target end
 
@@ -271,6 +280,20 @@ local function fixture(options)
                 end
                 return category, layout
             end,
+            -- DQT's page under Dyre's Toolkit's home; state.registered is DQT's page either way.
+            RegisterVerticalLayoutSubcategory = function(parent, name)
+                local category, layout = env.Settings.RegisterVerticalLayoutCategory(name)
+                category.parent = parent
+                if name == PAGE or name == SHORT_PAGE then state.registered = category end
+                return category, layout
+            end,
+            NotifyUpdate = function(variable) state.notified = variable end,
+            CreateSlider = function(category, setting, sliderOptions, tooltip)
+                return initializer(category, setting, sliderOptions, tooltip)
+            end,
+            CreateSliderOptions = function(minValue, maxValue, step)
+                return {minValue = minValue, maxValue = maxValue, step = step}
+            end,
             RegisterProxySetting = function(category, variable, variableType, name, default, getValue, setValue)
                 equal(state.settings[variable], nil, "setting variables are unique")
                 local setting = {variable = variable, type = variableType, name = name, default = default}
@@ -279,7 +302,9 @@ local function fixture(options)
                 state.settings[variable] = setting
                 return setting
             end,
-            RegisterAddOnCategory = function(category) state.registered = category end,
+            RegisterAddOnCategory = function(category)
+                if category.name == PAGE then state.registered = category else state.home = category end
+            end,
             CreateCheckbox = function(category, setting, tooltip) return initializer(category, setting, nil, tooltip) end,
             CreateDropdown = function(category, setting, choices, tooltip)
                 return initializer(category, setting, choices, tooltip)
@@ -296,9 +321,21 @@ local function fixture(options)
     if not options.noSettings and not options.noSectionHeaders then
         env.CreateSettingsListSectionHeaderInitializer = function(name) return {header = name} end
     end
+    if not options.noSettings then
+        env.CreateSettingsButtonInitializer = function(name, label, onClick, tooltip)
+            return {button = label, onClick = onClick, tooltip = tooltip}
+        end
+    end
 
-    env.CreateFrame = function(kind)
-        local frame = {kind = kind, events = {}, scripts = {}}
+    -- Frames, as far as DQT, its box, and Dyre's Toolkit use them. Unknown
+    -- methods (layout and colors) do nothing.
+    local SPOTS = {CENTER = {0.5, 0.5}, BOTTOMLEFT = {0, 0}, BOTTOMRIGHT = {1, 0}, TOPLEFT = {0, 1},
+        TOPRIGHT = {1, 1}, TOP = {0.5, 1}, BOTTOM = {0.5, 0}, LEFT = {0, 0.5}, RIGHT = {1, 0.5}}
+    local function newFrame(kind, frameName, parent, template)
+        local frame = {kind = kind, name = frameName, parent = parent, template = template, events = {},
+            scripts = {}, points = {}, shown = true, enabled = true, children = {}}
+        if parent and parent.children then parent.children[#parent.children + 1] = frame end
+        if kind == "Button" then frame.mouse = true end
         function frame:RegisterEvent(event)
             if event == "COMBAT_LOG_EVENT_UNFILTERED" then
                 error("COMBAT_LOG_EVENT_UNFILTERED is restricted")
@@ -311,8 +348,101 @@ local function fixture(options)
             self.events[event] = true
         end
         function frame:SetScript(script, callback) self.scripts[script] = callback end
+        function frame:GetScript(script) return self.scripts[script] end
+        function frame:StartMoving() self.moving = true end
+        function frame:StopMovingOrSizing() self.moving = false end
+        function frame:HookScript(script, hook)
+            local original = self.scripts[script]
+            self.scripts[script] = function(...)
+                if original then original(...) end
+                hook(...)
+            end
+        end
+        function frame:SetBackdrop(backdrop) self.backdrop = backdrop end
+        function frame:SetBackdropColor(...) self.backdropColor = {...} end
+        function frame:SetBackdropBorderColor(...) self.backdropBorder = {...} end
+        function frame:EnableMouse(value) self.mouse = value == true end
+        function frame:SetAlpha(value) self.alpha = value end
+        function frame:GetAlpha() return self.alpha or 1 end
+        function frame:SetScale(value) self.scale = value end
+        function frame:GetScale() return self.scale or 1 end
+        function frame:GetTop() local _, y = self:GetCenter() return y + (self.height or 0) / 2 end
+        function frame:GetLeft() local x = self:GetCenter() return x - (self.width or 0) / 2 end
+        function frame:GetRight() local x = self:GetCenter() return x + (self.width or 0) / 2 end
+        function frame:GetEffectiveScale()
+            local parentScale = self.parent and self.parent.GetEffectiveScale and self.parent:GetEffectiveScale() or 1
+            return (self.scale or 1) * parentScale
+        end
+        function frame:GetNumPoints() return #self.points end
+        function frame:GetWidth() return self.width or 0 end
+        function frame:GetHeight() return self.height or 0 end
+        function frame:SetWidth(width) self.width = width end
+        function frame:SetHeight(height) self.height = height end
+        function frame:SetSize(width, height) self.width, self.height = width, height end
+        function frame:GetCenter()
+            local x, y = state.absCenter(self)
+            local scale = self:GetEffectiveScale()
+            return x / scale, y / scale
+        end
+        function frame:Show() self.shown = true end
+        function frame:Hide() self.shown = false end
+        function frame:SetShown(value) self.shown = value == true end
+        function frame:IsShown() return self.shown end
+        function frame:IsProtected() return false end
+        function frame:SetPoint(...) self.points[#self.points + 1] = {...} end
+        function frame:ClearAllPoints() self.points = {} end
+        function frame:SetText(text) self.text = text end
+        function frame:GetText() return self.text end
+        function frame:SetFont(file, size, flags) self.font = {file, size, flags} end
+        function frame:SetEnabled(value) self.enabled = value == true end
+        function frame:IsEnabled() return self.enabled end
+        function frame:SetNormalTexture(texture) self.normalTexture = texture end
+        function frame:SetTexture(texture) self.texture = texture end
+        function frame:SetColorTexture(...) self.color = {...} end
+        function frame:SetMouseClickEnabled(value) self.mouseClicks = value == true end
+        function frame:SetDesaturated(value) self.desaturated = value == true end
+        function frame:SetFrameLevel(level) self.level = level end
+        function frame:GetFrameLevel()
+            if self.level then return self.level end
+            return self.parent and self.parent.GetFrameLevel and self.parent:GetFrameLevel() + 1 or 1
+        end
+        function frame:SetMouseMotionEnabled(value) self.mouseMotion = value == true end
+        -- Text cut with "...": a test sets truncated.
+        function frame:IsTruncated() return self.truncated == true end
+        function frame:CreateFontString() return newFrame("FontString", nil, self) end
+        function frame:CreateTexture() return newFrame("Texture", nil, self) end
+        function frame:GetFontString()
+            self.label = self.label or newFrame("FontString", nil, self)
+            return self.label
+        end
+        -- A click as the client sends it: nothing on a disabled button.
+        function frame:Click()
+            if self.enabled and self.scripts.OnClick then self.scripts.OnClick(self, "LeftButton") end
+        end
+        return setmetatable(frame, {__index = function(_, key)
+            if type(key) == "string" and key:match("^%u") then return function() end end
+        end})
+    end
+    env.CreateFrame = function(kind, frameName, parent, template)
+        local frame = newFrame(kind, frameName, parent, template)
+        if frameName then env[frameName] = frame end
         state.frames[#state.frames + 1] = frame
         return frame
+    end
+    env.UIParent = newFrame("Frame", "UIParent")
+    env.UIParent.width, env.UIParent.height = 1000, 800
+    -- Screen position of a frame's center, from its last point.
+    function state.absCenter(frame)
+        if frame == env.UIParent or frame == nil then return 500, 400 end
+        local point = frame.points[#frame.points]
+        if not point then return 500, 400 end
+        local relative = type(point[2]) == "table" and point[2] or env.UIParent
+        local rx, ry = state.absCenter(relative)
+        local spot = SPOTS[point[3]] or SPOTS.CENTER
+        local width, height = relative.width or 0, relative.height or 0
+        local scale = frame:GetEffectiveScale()
+        return rx + (spot[1] - 0.5) * width + (point[4] or 0) * scale, ry + (spot[2] - 0.5) * height
+            + (point[5] or 0) * scale
     end
     function state.emit(event, ...)
         for _, frame in ipairs(state.frames) do
@@ -322,6 +452,22 @@ local function fixture(options)
         end
     end
 
+    -- Dyre's Toolkit, its real files: DQT requires it. options.noToolkit
+    -- leaves it out; options.oldToolkit offers contract 1 only.
+    if not options.noToolkit then
+        state.toolkitNS = {InitializeMinimap = function() end}
+        for _, path in ipairs(TOOLKIT_FILES) do
+            local chunk = assert(loadfile("tests/toolkit/" .. path))
+            setfenv(chunk, env)
+            chunk("DyresToolkit", state.toolkitNS)
+        end
+        state.toolkit = env.DyresToolkit
+        if options.oldToolkit then
+            env.DyresToolkit.RequireContract = function(n)
+                if n == 1 then return env.DyresToolkit end
+            end
+        end
+    end
     local namespace = {}
     for _, file in ipairs(RUNTIME_FILES) do
         local chunk = assert(loadfile(file))
@@ -329,7 +475,15 @@ local function fixture(options)
         chunk(ADDON, namespace)
     end
     state.dqt, state.env = namespace, env
-    env.DyresQuestTargetingDB = options.saved
+    -- Most tests look at an open hit list; options.realDefaults keeps DQT's
+    -- own default (the hit list starts folded).
+    local saved = options.saved
+    if not options.realDefaults and (saved == nil or type(saved) == "table") then
+        saved = saved or {}
+        if saved.startHitListFolded == nil then saved.startHitListFolded = false end
+    end
+    env.DyresQuestTargetingDB = saved
+    state.emit("ADDON_LOADED", "DyresToolkit")
     state.emit("ADDON_LOADED", ADDON)
     state.emit("PLAYER_LOGIN")
     -- As in client, the game restores its focus while the world loads.
@@ -366,7 +520,7 @@ local CONDOR_QUEST = {[101] = {title = "The Condor Hunt", objectives = {
 
 test("logs in with a banner and makes the character macro", function()
     local state = fixture()
-    contains(state.messages[1], "DQT: Dyre's Quest Targeting 1.0.0 by Dyre")
+    contains(state.messages[1], "DQT: Dyre's Quest Targeting 1.1.0 by Dyre")
     equal(state.said("Ready."), true)
     equal(state.dqt.available, true)
     contains(state.macro(), "nothing to target")
@@ -610,9 +764,8 @@ test("the Questie settings sit under an experimental section heading", function(
     local list = state.registered.initializers
     local heading
     for index, object in ipairs(list) do
-        if object.header then heading = index end
+        if object.header == "Questie Synchronization (Experimental)" then heading = index end
     end
-    equal(list[heading].header, "Questie Synchronization (Experimental)")
     equal(list[heading + 1].setting.variable, "DQT_SYNC_FOCUS")
     equal(list[heading + 2].setting.variable, "DQT_TOMTOM")
     contains(list[heading + 1].setting.name, "(experimental)")
@@ -1192,13 +1345,13 @@ test("bad commands show the usage; commands are not case sensitive", function()
     state.slash("on please")
     contains(state.last(), "Use /dqt")
     state.slash("OPTIONS")
-    equal(state.opened, "id:Dyre's Quest Targeting")
+    equal(state.opened, state.registered:GetID())
 end)
 
 test("/dqt alone opens the settings, out of combat only; /dqt list lists", function()
     local state = fixture({quests = CONDOR_QUEST, focus = 101})
     state.slash("")
-    equal(state.opened, "id:Dyre's Quest Targeting")
+    equal(state.opened, state.registered:GetID())
     state.opened = nil
     state.combat = true
     state.slash("")
@@ -1209,78 +1362,844 @@ test("/dqt alone opens the settings, out of combat only; /dqt list lists", funct
     state.combat = false
 end)
 
--- Dyre's Toolkit's contract 1, as its Core.lua and Settings.lua give it:
--- RequireContract returns the toolkit, or nil for a contract it does not have.
-local function toolkitGlobal(contract, noPage)
-    local toolkit = {members = {}}
-    function toolkit.RequireContract(required)
-        if required <= (contract or 1) and required >= 1 then return toolkit end
-    end
-    function toolkit.RegisterAddOn(info) toolkit.members[#toolkit.members + 1] = info end
-    function toolkit.RegisterSettingsCategory(name)
-        if noPage then return nil end
-        local category = {name = name, initializers = {}}
-        function category:GetID() return "id:Dyre's AddOns/" .. name end
-        local layout = {}
-        function layout:AddInitializer(object)
-            category.initializers[#category.initializers + 1] = object
-        end
-        toolkit.page = category
-        return category, layout
-    end
-    return toolkit
+-- The Quest Target box -------------------------------------------------------------------------
+
+local function strip(text)
+    return (text:gsub("|c%x%x%x%x%x%x%x%x", ""):gsub("|r", ""))
 end
 
-local TOOLKIT_HINT = "Install Dyre's Toolkit from CurseForge"
-
-test("with Dyre's Toolkit, the settings page sits under its home and DQT joins its menu", function()
-    local toolkit = toolkitGlobal()
-    local state = fixture({globals = {DyresToolkit = toolkit}})
-    equal(state.registered, nil, "no top-level page")
-    equal(toolkit.page.name, "Dyre's Quest Targeting")
-    local heading
-    for index, object in ipairs(toolkit.page.initializers) do
-        if object.header then heading = index end
+-- The box's shown text rows (the header first), top to bottom.
+local function boxRows(state)
+    local list = {}
+    for _, child in ipairs(state.dqt.box.children) do
+        if child.kind == "Button" and child.rate and child.shown then list[#list + 1] = child end
     end
-    equal(toolkit.page.initializers[heading].header, "Questie Synchronization (Experimental)")
-    equal(#toolkit.members, 1)
-    equal(toolkit.members[1].addon, "DyresQuestTargeting")
-    equal(toolkit.members[1].title, "Dyre's Quest Targeting")
-    toolkit.members[1].openSettings()
-    equal(state.opened, "id:Dyre's AddOns/Dyre's Quest Targeting")
+    table.sort(list, function(a, b) return a.points[1][5] > b.points[1][5] end)
+    return list
+end
+
+-- Each row as text, with " | <rate>" when it has a rate column.
+local function boxLines(state)
+    local list = {}
+    for _, row in ipairs(boxRows(state)) do
+        local text = strip(row.label.text)
+        if row.rate.shown then text = text .. " | " .. row.rate.text end
+        list[#list + 1] = text
+    end
+    return list
+end
+
+local function boxRow(state, fragment)
+    for _, row in ipairs(boxRows(state)) do
+        if strip(row.label.text):find(fragment, 1, true) then return row end
+    end
+end
+
+local FOOTER_TEXTURES = {add = "Interface\\Buttons\\UI-PlusButton-Up",
+    clear = "Interface\\Buttons\\UI-GroupLoot-Pass-Up"}
+
+-- A footer icon: "add" or "clear".
+-- The footer bar: the box's inset panel that holds the icons.
+local function footerBar(state)
+    for _, child in ipairs(state.dqt.box.children) do
+        if child.kind == "Frame" and child.template == "BackdropTemplate" then
+            for _, inner in ipairs(child.children) do
+                if inner.tip then return child end
+            end
+        end
+    end
+end
+
+-- The footer's middle: the hit list's title, which folds it.
+local function footerTitle(state)
+    for _, child in ipairs(footerBar(state).children) do
+        if child.kind == "Button" and child.tip == "Show or hide the hit list." then return child end
+    end
+end
+
+local function footerCount(state)
+    for _, child in ipairs(footerTitle(state).children) do
+        if child.kind == "FontString" then return strip(child.text) end
+    end
+end
+
+local function footerIcon(state, which)
+    for _, child in ipairs(footerBar(state).children) do
+        if child.kind == "Button" and child.tip and child.icon and child.icon.texture == FOOTER_TEXTURES[which] then
+            return child
+        end
+    end
+end
+
+-- Add your target: a click, or a Shift-click for the exact name.
+local function addTarget(state, exact)
+    state.shift = exact == true
+    footerIcon(state, "add"):Click()
+    state.shift = false
+end
+
+-- The red X on the row that shows a hit list name.
+local function removeButton(state, name)
+    for _, row in ipairs(boxRows(state)) do
+        if row.remove.shown and row.remove.name == name then return row.remove end
+    end
+end
+
+-- The box's top edge on screen.
+local function boxTop(state)
+    local _, y = state.absCenter(state.dqt.box)
+    return y + state.dqt.box.height * state.dqt.box:GetEffectiveScale() / 2
+end
+
+local SILK_RATES = {db = DB, focus = 101, quests = {[101] = {title = "Silk", objectives = {
+    objective("Dire Condor slain: 0/8"), objective("Tarantula Silk: 0/6", "item")}}},
+    questie = {rates = {[50] = {[20] = 4, [21] = 30.3}}}}
+
+test("box: a toolkit widget, a rounded panel with a thin gold edge and a rounded header inset", function()
+    local state = fixture({quests = CONDOR_QUEST, focus = 101})
+    local box = state.dqt.box
+    equal(state.toolkit.Widgets(ADDON)[1], box)
+    equal(box.name, "DyresQuestTargetingBox")
+    equal(box.backdrop.edgeFile, "Interface\\Tooltips\\UI-Tooltip-Border", "the tooltip's rounded edge")
+    equal(box.backdrop.edgeSize, 14, "thin")
+    equal(box.backdropColor[1], 0.28, "brown and gold by default")
+    equal(box.backdropBorder[2], 0.82, "gold")
+    local header = boxRows(state)[1]
+    equal(header.template, "BackdropTemplate", "the header is its own panel")
+    equal(header.backdrop.edgeFile, "Interface\\Tooltips\\UI-Tooltip-Border", "rounded too")
+    equal(header.backdropColor[1] < box.backdropColor[1], true, "a darker inset")
+    equal(header.backdropBorder[2], 0.82, "a gold edge")
+    for _, child in ipairs(box.children) do
+        equal(child.template ~= "UIPanelCloseButtonNoScripts" and child.template ~= "UIPanelCloseButton", true,
+            "no close button")
+    end
+    for _, child in ipairs(header.children) do
+        if child.kind == "Button" then
+            equal(child == header.fold or child == header.remove, true, "the header's one button: fold")
+        end
+    end
+    equal(box.shown, true)
+    equal(box.width, 240)
+    equal(box:GetSetting("height"), 235, "Max height")
+    equal(box.height < 235, true, "a short list: a shorter box")
+end)
+
+test("box: Style re-colors the box at once, also in combat; a bad saved style is repaired", function()
+    local state = fixture({quests = CONDOR_QUEST, focus = 101})
+    local box = state.dqt.box
+    local header = boxRows(state)[1]
+    local labels, dropdown = {}, nil
+    for _, object in ipairs(state.registered.initializers) do
+        if object.setting and object.setting.variable == "DQT_BOX_STYLE" then dropdown = object end
+    end
+    for _, choice in ipairs(dropdown.options()) do
+        labels[#labels + 1] = choice.label
+    end
+    equal(table.concat(labels, ","), "Brown and gold,Black and gold")
+    state.combat = true
+    state.settings.DQT_BOX_STYLE:SetValue("black")
+    equal(state.env.DyresQuestTargetingDB.boxStyle, "black")
+    equal(box.backdropColor[1], 0.05, "near black, at once")
+    equal(box.backdropColor[4], 0.9)
+    equal(box.backdropBorder[2], 0.82, "the same gold edge")
+    equal(header.backdropColor[1] > box.backdropColor[1], true, "the header a little lighter, so it reads")
+    state.settings.DQT_BOX_STYLE:SetValue("pink")
+    equal(state.env.DyresQuestTargetingDB.boxStyle, "black", "an unknown style is refused")
+    state.settings.DQT_BOX_STYLE:SetValue("brown")
+    equal(box.backdropColor[1], 0.28)
+    state.combat = false
+    local repaired = fixture({saved = {boxStyle = "pink"}})
+    equal(repaired.env.DyresQuestTargetingDB.boxStyle, "brown")
+    local black = fixture({quests = CONDOR_QUEST, focus = 101, saved = {boxStyle = "black"}})
+    equal(black.dqt.box.backdropColor[1], 0.05, "a saved style applies at login")
+end)
+
+test("box: clicks pass through all but the buttons, the header, and the section titles", function()
+    local state = fixture({quests = CONDOR_QUEST, focus = 101, saved = {added = {{name = "Goretusk"}}}})
+    local box = state.dqt.box
+    equal(box.mouse, false, "the box itself lets clicks through while locked")
+    equal(footerIcon(state, "add").mouse, true, "its footer icons take clicks")
+    equal(footerIcon(state, "clear").mouse, true)
+    equal(footerIcon(state, "add").template, nil, "plain buttons, nothing secure")
+    for _, child in ipairs(box.children) do
+        equal(child.template ~= "UIPanelButtonTemplate", true, "no text buttons")
+    end
+    equal(boxRows(state)[1].mouseClicks, nil, "the header takes clicks (to fold)")
+    local title = boxRow(state, "Targets, most wanted first")
+    equal(title.mouseClicks, true, "a section title takes clicks")
+    local target = boxRow(state, "Dire Condor")
+    equal(target.mouseClicks, false, "a target row: clicks pass through to the world")
+    equal(target.mouseMotion, true, "the mouse-over shows cut text")
+    local hit = boxRow(state, "Goretusk")
+    equal(hit.mouseClicks, true, "a hit list row takes clicks, to drag it")
+    equal(hit.mouseMotion, true)
+    equal(removeButton(state, "Goretusk").mouse, true, "the red X takes clicks")
+    state.toolkit.Unlock()
+    equal(box.mouse, true, "unlocked: the box drags")
+    equal(box.dyre.mover.shown, true, "the toolkit's outline")
+    state.toolkit.Lock()
+    equal(box.mouse, false)
+end)
+
+test("box: the header, then the targets most wanted first, with a rate column", function()
+    local state = fixture(SILK_RATES)
+    local lines = boxLines(state)
+    equal(lines[1], "Silk (Focus)")
+    equal(lines[2], "Targets, most wanted first (5)")
+    equal(lines[3], "Dire Condor kill objective | -", "the first objective is most wanted; no rate")
+    equal(lines[4], "Giant Tarantula drops Tarantula Silk | 30.3%")
+    equal(lines[5], "Tarantula drops Tarantula Silk | 4.0%")
+    equal(lines[6], "Cave Tarantula drops Tarantula Silk | -", "no rate known: a dash, never cut off")
+end)
+
+test("box: a Questie objective focus, a complete quest, and no focus", function()
+    local state = fixture({quests = TWO_QUESTS, questie = {}})
+    state.questieUtils:FocusObjective(2, 2)
+    state.advance()
+    local lines = boxLines(state)
+    equal(lines[1], "Wolves (Questie)")
+    equal(lines[2], "Objective: Bear slain: 0/2")
+    equal(lines[4], "Bear kill objective | -")
+    local quests = {[101] = {title = "Silk", complete = true, objectives = {objective("Dire Condor slain: 8/8",
+        "monster", true)}}}
+    local done = fixture({db = DB, focus = 101, quests = quests})
+    lines = boxLines(done)
+    equal(lines[1], "Silk (Focus) · ready to turn in")
+    equal(lines[3], "Guard Parker turn-in | -")
+    local none = fixture()
+    equal(none.dqt.box.shown, false, "nothing to show: hidden")
+    none.toolkit.Unlock()
+    equal(none.dqt.box.shown, true, "unlocked: shown, to move it")
+    equal(boxLines(none)[1], "No focused quest")
+    none.toolkit.Lock()
+    equal(none.dqt.box.shown, false)
+end)
+
+test("box: names left out of the macro are listed apart", function()
+    local list = {}
+    for index = 1, 12 do
+        list[index] = objective("Very Long Named Creature Number " .. index .. " slain: 0/1")
+    end
+    local state = fixture({focus = 5, quests = {[5] = {title = "Many", objectives = list}},
+        saved = {box = {height = 600}}})
+    local lines = boxLines(state)
+    local heading
+    for index, line in ipairs(lines) do
+        if line:find("^Not in the macro") then heading = index end
+    end
+    contains(lines[heading], "Not in the macro (255-letter limit) (")
+    contains(lines[heading + 1], "Very Long Named Creature Number ")
+    contains(lines[#lines], "Number 12 · kill objective | -", "the least important is left out first")
+end)
+
+test("box: the hit list, newest first, with its kind, and the X, Clear, and Add buttons", function()
+    local state = fixture({quests = CONDOR_QUEST, focus = 101})
+    state.target = "Goretusk"
+    addTarget(state)
+    state.target = "Defias Bandit"
+    addTarget(state, true)
+    contains(state.last(), "Added Defias Bandit to your hit list (exact name).")
+    local lines = boxLines(state)
+    equal(lines[#lines - 1], "Defias Bandit exact", "no title row: the footer is the hit list's title")
+    equal(lines[#lines], "Goretusk similar")
+    equal(footerCount(state), "Hit list: 2")
+    contains(state.macro(), "/targetexact Defias Bandit")
+    removeButton(state, "Goretusk"):Click()
+    equal(state.last(), "DQT: Removed Goretusk from your hit list.")
+    equal(removeButton(state, "Goretusk"), nil)
+    lacks(state.macro(), "Goretusk")
+    equal(footerIcon(state, "clear").enabled, true)
+    equal(footerIcon(state, "clear").icon.desaturated, false)
+    footerIcon(state, "clear"):Click()
+    equal(state.last(), "DQT: Cleared your hit list (1 name).")
+    equal(#state.env.DyresQuestTargetingDB.added, 0)
+    equal(footerIcon(state, "clear").enabled, false, "nothing to clear")
+    equal(footerIcon(state, "clear").icon.desaturated, true, "greyed out")
+    state.target = nil
+    addTarget(state)
+    equal(state.last(), "DQT: Target a mob or type a name.")
+    state.target = secret()
+    state.secrets[state.target] = true
+    addTarget(state, true)
+    contains(state.last(), "cannot be read right now")
+    equal(#state.env.DyresQuestTargetingDB.added, 0, "a secret name is never kept")
+end)
+
+test("box: in combat the buttons change the hit list at once, and the macro waits", function()
+    local state = fixture({quests = CONDOR_QUEST, focus = 101})
+    state.combat = true
+    state.target = "Goretusk"
+    addTarget(state)
+    equal(state.last(), "DQT: Added Goretusk to your hit list (any name containing it). The macro updates "
+        .. "after combat.")
+    local lines = boxLines(state)
+    equal(lines[#lines], "Goretusk similar", "the box shows it at once")
+    lacks(state.macro(), "Goretusk", "the macro waits")
+    removeButton(state, "Goretusk"):Click()
+    contains(state.last(), "The macro updates after combat.")
+    state.combat = false
+    state.emit("PLAYER_REGEN_ENABLED")
+    state.advance()
+    lacks(state.macro(), "Goretusk")
+end)
+
+test("box: box size and text size are independent; a long list is cut with \"+N more\"", function()
+    local saved = {added = {}}
+    for index = 1, 10 do
+        saved.added[index] = {name = "Mob " .. index, exact = false}
+    end
+    local state = fixture({quests = TWO_QUESTS, focus = 2, saved = saved})
+    local box = state.dqt.box
+    local lines = boxLines(state)
+    equal(lines[1], "Wolves (Focus)")
+    equal(lines[2], "Targets, most wanted first (2)")
+    equal(lines[5], "Mob 10 similar", "rows are shared: both targets, then the hit list, newest first")
+    contains(lines[#lines], " more: /dqt list shows all")
+    equal(box.height <= 235 and box.height > 235 - 15, true, "a long list: the last whole row under Max height")
+    local rowsAtDefault = #lines
+    box:SetSetting("textSize", 150)
+    equal(box.height <= 235 and box.height > 235 - 21, true, "bigger text: still up to Max height")
+    equal(box.width, 240)
+    equal(boxRows(state)[2].label.font[2], 18, "150% of 12")
+    equal(#boxLines(state) < rowsAtDefault, true, "bigger text: fewer rows")
+    box:SetSetting("textSize", 100)
+    box:SetSetting("height", 400)
+    equal(boxRows(state)[2].label.font[2], 12, "a bigger box does not resize the text")
+    equal(#boxLines(state) > rowsAtDefault, true, "a bigger box: more rows")
+    equal(box.height <= 400, true)
+    box:SetSetting("opacity", 50)
+    box:ResetSize()
+    equal(box:GetSetting("height"), 235)
+    equal(box:GetSetting("textSize"), 100)
+    equal(box:GetSetting("opacity"), 50, "Reset size keeps opacity")
+end)
+
+-- The empty strip: the backdrop frame without an edge.
+local function boxStrip(state)
+    for _, child in ipairs(state.dqt.box.children) do
+        if child.kind == "Frame" and child.backdrop and child.backdrop.bgFile and not child.backdrop.edgeFile then
+            return child
+        end
+    end
+end
+
+-- A frame's top, as an offset from the box's top.
+local function topOffset(frame)
+    return -frame.points[1][5]
+end
+
+test("box: the hit list bar sits over its names; it grows and shrinks; the empty strip", function()
+    local state = fixture({quests = TWO_QUESTS, focus = 2})
+    local box = state.dqt.box
+    local top, height = boxTop(state), box.height
+    local bar, stripFrame = footerBar(state), boxStrip(state)
+    equal(stripFrame.shown, true, "open: the strip shows")
+    equal(stripFrame.height, 11, "half a bar")
+    equal(stripFrame.backdropColor[1], bar.backdropColor[1], "the bars' fill, no edge, no text")
+    -- No hit list names: the quest rows, the bar, then the strip in its section.
+    equal(topOffset(stripFrame) > topOffset(bar), true, "no names: the strip under the bar, in its section")
+    equal(height, 5 + 21 + 3 + 3 * 15 + 3 * 2 + 11 + 21 + 5, "its content's height")
+    state.target = "Goretusk"
+    addTarget(state)
+    -- With names: the quest rows, the bar (the hit list's title), its names, the strip.
+    local name = boxRow(state, "Goretusk")
+    local lastTarget = boxRow(state, "Bear")
+    equal(topOffset(bar) > lastTarget.offset, true, "the bar under the targets")
+    equal(name.offset > topOffset(bar), true, "the name under its bar")
+    equal(topOffset(stripFrame) > name.offset, true, "the strip under the names")
+    equal(box.height, height + 15 + 3, "one more row (and its gap): it grows")
+    equal(math.abs(boxTop(state) - top) < 0.01, true, "the top edge stays")
+    footerTitle(state):Click()
+    equal(boxRow(state, "Goretusk"), nil, "hidden")
+    equal(stripFrame.shown, false, "hidden: no strip")
+    equal(box.height, height - 11 - 3, "the bar right under the targets")
+    footerTitle(state):Click()
+    removeButton(state, "Goretusk"):Click()
+    equal(box.height, height, "it shrinks again")
+    boxRows(state)[1].fold:Click()
+    equal(stripFrame.shown, false, "all folded: no strip")
+end)
+
+test("box: a row whose text is cut shows the whole text on mouse-over", function()
+    local state = fixture(SILK_RATES)
+    state.env.GameTooltip = {}
+    local tip = state.env.GameTooltip
+    function tip:SetOwner(owner) self.owner = owner end
+    function tip:GetOwner() return self.owner end
+    function tip:SetText(text) self.text = text end
+    function tip:Show() self.shown = true end
+    function tip:Hide() self.shown = false end
+    local row = boxRow(state, "Giant Tarantula")
+    row.scripts.OnEnter(row)
+    equal(tip.shown, nil, "not cut: no tooltip")
+    row.label.truncated = true
+    row.scripts.OnEnter(row)
+    equal(tip.shown, true)
+    equal(tip.text, "Giant Tarantula · drops Tarantula Silk, 30.3% drop rate")
+    row.scripts.OnLeave(row)
+    equal(tip.shown, false)
+    local unknown = boxRow(state, "Cave Tarantula")
+    unknown.label.truncated = true
+    unknown.scripts.OnEnter(unknown)
+    equal(tip.text, "Cave Tarantula · drops Tarantula Silk, drop rate unknown", "words, not the column's \"-\"")
+    equal(unknown.rate.text, "-", "the column keeps the dash")
+    local kill = boxRow(state, "Dire Condor")
+    kill.label.truncated = true
+    kill.scripts.OnEnter(kill)
+    equal(tip.text, "Dire Condor · kill objective", "a kill has no drop rate")
+    function tip:AddLine(text) self.lines = self.lines or {} self.lines[#self.lines + 1] = text end
+    local header = boxRows(state)[1]
+    header.scripts.OnEnter(header)
+    equal(tip.text, "Dyre's Quest Targeting", "the header's tooltip names the AddOn, cut or not")
+    equal(tip.lines[1], "Silk (Focus)", "then the whole header line")
+    header.scripts.OnLeave(header)
+    equal(tip.shown, false)
+end)
+
+test("box: each title folds its part, keeping the top edge; the folds are saved", function()
+    local state = fixture({quests = TWO_QUESTS, questie = {}, saved = {added = {{name = "Goretusk"}}}})
+    state.questieUtils:FocusObjective(2, 2)
+    state.advance()
+    local box = state.dqt.box
+    local folded = state.env.DyresQuestTargetingDB.box.foldedSections
+    local top, height = boxTop(state), box.height
+    -- The quest's name (the header) folds the quest's part; the hit list stays.
+    boxRows(state)[1]:Click()
+    equal(folded.quest, true, "saved")
+    equal(boxRow(state, "Targets, most wanted first"), nil, "the quest's rows hide")
+    equal(boxRow(state, "Objective: Bear slain: 0/2") ~= nil, true, "the objective line stays")
+    equal(type(boxRow(state, "Goretusk")), "table", "the hit list stays open")
+    equal(box.height < height, true, "it shrinks")
+    equal(math.abs(boxTop(state) - top) < 0.01, true, "the top edge stays")
+    boxRows(state)[1]:Click()
+    equal(folded.quest, nil)
+    equal(box.height, height, "open again: its content's height")
+    equal(math.abs(boxTop(state) - top) < 0.01, true, "the top edge stays")
+    -- A section title folds that section.
+    boxRow(state, "Targets, most wanted first"):Click()
+    equal(folded.targets, true, "saved")
+    equal(box.height < height, true, "a folded section shrinks the box")
+    equal(boxRow(state, "Bear kill objective"), nil, "its rows are hidden")
+    contains(strip(boxRow(state, "Targets, most wanted first").label.text), "(1)", "the title keeps its count")
+    -- "Hit list" in the bar folds the hit list.
+    footerTitle(state):Click()
+    equal(folded.added, true)
+    equal(boxRow(state, "Goretusk"), nil, "the bar's title folds the hit list")
+    equal(footerCount(state), "Hit list: 1 (hidden)")
+    boxRow(state, "Targets, most wanted first"):Click()
+    equal(type(boxRow(state, "Bear kill objective")), "table")
+    local again = fixture({quests = TWO_QUESTS, focus = 2,
+        saved = {added = {{name = "Goretusk"}}, box = {foldedSections = {targets = true}}}})
+    equal(boxRow(again, "Bear kill objective"), nil, "section folds are saved")
+end)
+
+test("box: a fold button at the header's right folds and opens, keeping the top edge", function()
+    local state = fixture({quests = TWO_QUESTS, focus = 2})
+    local header = boxRows(state)[1]
+    local fold = header.fold
+    equal(fold.kind, "Button")
+    equal(fold.mouse, true, "it takes clicks")
+    equal(fold.points[1][1], "RIGHT")
+    equal(fold.points[1][3], "RIGHT", "at the header's right end")
+    equal(fold.width, 17, "the same size as the footer icons")
+    local right = header.label.points[#header.label.points]
+    equal(right[1], "RIGHT")
+    equal(right[2], fold, "the header text stops before the button")
+    equal(fold.normalTexture, "Interface\\Buttons\\UI-MinusButton-Up", "open: minus")
+    local top, height = boxTop(state), state.dqt.box.height
+    local folded = state.env.DyresQuestTargetingDB.box.foldedSections
+    folded.targets = true
+    fold:Click()
+    equal(folded.quest and folded.added, true, "the button folds all")
+    equal(#boxLines(state), 1, "the header only")
+    equal(state.dqt.box.height < height, true)
+    equal(math.abs(boxTop(state) - top) < 0.01, true, "the top edge stays")
+    equal(fold.normalTexture, "Interface\\Buttons\\UI-PlusButton-Up", "all folded: plus")
+    fold:Click()
+    equal(next(folded), nil, "and opens all, the sections too")
+    equal(fold.normalTexture, "Interface\\Buttons\\UI-MinusButton-Up")
+    equal(state.dqt.box.height, height)
+    equal(math.abs(boxTop(state) - top) < 0.01, true)
+    -- With only the quest's part folded, the button folds the rest.
+    boxRows(state)[1]:Click()
+    equal(fold.normalTexture, "Interface\\Buttons\\UI-MinusButton-Up", "the hit list still open: minus")
+end)
+
+test("box: two footer icons, bottom right, with tooltips; they drag the box and click safely", function()
+    local state = fixture({quests = CONDOR_QUEST, focus = 101})
+    local add, clear = footerIcon(state, "add"), footerIcon(state, "clear")
+    equal(add.width, 17, "1.4 text sizes: the mark just under the title's letters")
+    equal(clear.points[1][1], "RIGHT", "clear at the footer bar's right end")
+    equal(clear.points[1][2], footerBar(state))
+    equal(clear.points[1][4], -7, "inset as the fold button")
+    equal(add.points[1][1], "LEFT", "add at the left end")
+    equal(add.points[1][2], footerBar(state))
+    equal(add.points[1][4], 7)
+    state.env.GameTooltip = {}
+    local tip = state.env.GameTooltip
+    function tip:SetOwner(owner) self.owner = owner end
+    function tip:GetOwner() return self.owner end
+    function tip:SetText(text) self.text = text end
+    function tip:Show() self.shown = true end
+    function tip:Hide() self.shown = false end
+    add.scripts.OnEnter(add)
+    equal(tip.text, "Add your target to the hit list. Shift-click to match the exact name.")
+    add.scripts.OnLeave(add)
+    equal(tip.shown, false)
+    clear.scripts.OnEnter(clear)
+    equal(tip.text, "Clear the hit list.")
+    -- Ctrl-drag on an icon moves the box, and does not also add.
+    state.target = "Goretusk"
+    state.env.IsControlKeyDown = function() return true end
+    add.scripts.OnMouseDown(add)
+    add.scripts.OnDragStart(add)
+    equal(state.dqt.box.moving, true, "a drag handle")
+    add.scripts.OnDragStop(add)
+    add.scripts.OnClick(add, "LeftButton")
+    equal(#state.env.DyresQuestTargetingDB.added, 0, "a drag is not a click")
+    state.env.IsControlKeyDown = function() return false end
+    add.scripts.OnMouseDown(add)
+    add:Click()
+    equal(state.env.DyresQuestTargetingDB.added[1].name, "Goretusk")
+    equal(state.env.DyresQuestTargetingDB.added[1].exact, false, "a click: similar names")
+    state.shift = true
+    add.scripts.OnMouseDown(add)
+    add:Click()
+    state.shift = false
+    equal(state.env.DyresQuestTargetingDB.added[1].exact, true, "Shift-click: the exact name")
+end)
+
+test("box: a footer bar like the header, click-through, with the count; icons follow Text size", function()
+    local state = fixture({quests = TWO_QUESTS, questie = {}, saved = {added = {{name = "Goretusk"},
+        {name = "Boar"}}}})
+    state.questieUtils:FocusObjective(2, 2)
+    state.advance()
+    local box, bar = state.dqt.box, footerBar(state)
+    local header = boxRows(state)[1]
+    equal(bar.backdrop.edgeFile, "Interface\\Tooltips\\UI-Tooltip-Border", "the header's rounded inset")
+    equal(bar.backdrop.edgeSize, header.backdrop.edgeSize)
+    equal(bar.backdropColor[1], header.backdropColor[1], "the same dark fill")
+    equal(bar.backdropBorder[4], header.backdropBorder[4], "the same softer gold edge")
+    equal(bar.height, header.height, "as tall as the header bar")
+    equal(bar.points[1][1], "TOPLEFT", "placed from the top, as the content grows")
+    local title = footerTitle(state)
+    equal(title.points[1][1], "TOPLEFT", "the hit list's title: the whole bar")
+    equal(title.points[1][2], bar)
+    equal(title.points[2][1], "BOTTOMRIGHT")
+    equal(footerIcon(state, "add").level > title:GetFrameLevel(), true, "the icons above it, so they keep their clicks")
+    equal(footerIcon(state, "clear").level > title:GetFrameLevel(), true)
+    equal(footerCount(state), "Hit list: 2")
+    for _, child in ipairs(bar.children) do
+        if child.kind == "FontString" then equal(child.points[1][1], "CENTER", "the count in the middle") end
+    end
+    state.settings.DQT_BOX_STYLE:SetValue("black")
+    equal(bar.backdropColor[1], header.backdropColor[1], "the style colors both bars")
+    -- All folded: header, objective, bar, top to bottom, evenly spaced, at each text size.
+    header.fold:Click()
+    for _, percent in ipairs({80, 100, 150}) do
+        box:SetSetting("textSize", percent)
+        local size = 12 * percent / 100
+        local line = math.floor(size + 3 + 0.5)
+        local barHeight = line + 6
+        local icon = math.floor(size * 1.4 + 0.5)
+        equal(footerIcon(state, "add").width, icon, percent .. "%: the icon follows Text size")
+        equal(header.fold.width, icon, percent .. "%: the fold button too")
+        equal(icon < barHeight, true, percent .. "%: the icons fit their bar")
+        equal(box.height, 5 * 2 + barHeight * 2 + line + 3 * 2, percent .. "%: a compact card")
+        local objective = boxRow(state, "Objective:")
+        equal(objective.points[1][5], -(5 + barHeight + 3), percent .. "%: one gap under the header")
+    end
+end)
+
+-- The cursor over the box, at an offset from its top (in the box's units).
+local function cursorAt(state, offset)
+    local box = state.dqt.box
+    local scale = box:GetEffectiveScale()
+    local x = box:GetCenter()
+    state.cursorX, state.cursorY = x * scale, (box:GetTop() - offset) * scale
+end
+
+-- Drags a hit list row and drops it at an offset from the box's top.
+local function dragRow(state, name, offset)
+    local row = boxRow(state, name)
+    row.scripts.OnDragStart(row)
+    equal(row.alpha, 0.5, "the dragged row dims")
+    equal(type(row.scripts.OnUpdate), "function", "the insertion line follows the cursor while dragging")
+    cursorAt(state, offset)
+    row.scripts.OnUpdate(row)
+    local line
+    for _, child in ipairs(state.dqt.box.children) do
+        if child.kind == "Texture" and child.height == 2 then line = child end
+    end
+    local shown = line.shown
+    row.scripts.OnDragStop(row)
+    equal(line.shown, false, "the insertion line hides on the drop")
+    equal(row.scripts.OnUpdate, nil, "no OnUpdate after the drag")
+    equal(row.alpha, 1)
+    return shown
+end
+
+local function hitNames(state)
+    local list = {}
+    for index = #state.env.DyresQuestTargetingDB.added, 1, -1 do
+        list[#list + 1] = state.env.DyresQuestTargetingDB.added[index].name
+    end
+    return table.concat(list, ",")
+end
+
+test("box: drag a hit list row to reorder it; the macro follows the new priority", function()
+    -- Saved newest last: the box shows Wolfie, Boar, Goretusk (most wanted first).
+    local saved = {added = {{name = "Goretusk"}, {name = "Boar"}, {name = "Wolfie"}}}
+    local state = fixture({quests = CONDOR_QUEST, focus = 101, saved = saved})
+    equal(hitNames(state), "Wolfie,Boar,Goretusk")
+    local first = boxRow(state, "Wolfie")
+    -- Goretusk (3rd) to the top: dropped above the first row's middle.
+    equal(dragRow(state, "Goretusk", first.offset + 1), true, "a gold insertion line while over the list")
+    equal(hitNames(state), "Goretusk,Wolfie,Boar", "db.added: newest (most wanted) last")
+    local macro = state.macro()
+    equal(macro:find("/tar Goretusk", 1, true) > macro:find("/tar Boar", 1, true), true,
+        "the macro: the most wanted line last, so it wins")
+    equal(boxLines(state)[#boxLines(state) - 2], "Goretusk similar")
+    -- Wolfie (2nd) to the bottom: below the last row.
+    local last = boxRow(state, "Boar")
+    dragRow(state, "Wolfie", last.offset + last.height * 1.2)
+    equal(hitNames(state), "Goretusk,Boar,Wolfie")
+    -- The drop area: the whole box. Above the first name (the bar, the
+    -- targets, the header too) is the top; below the last name the bottom.
+    local box = state.dqt.box
+    local bottom = box.height - 5
+    local barTop = topOffset(footerBar(state))
+    dragRow(state, "Goretusk", bottom - 1)
+    equal(hitNames(state), "Boar,Wolfie,Goretusk", "over the strip, just above the border: the bottom")
+    dragRow(state, "Goretusk", barTop + footerBar(state).height + 1)
+    equal(hitNames(state), "Goretusk,Boar,Wolfie", "just under the bar: the top")
+    dragRow(state, "Wolfie", barTop + 3)
+    equal(hitNames(state), "Wolfie,Goretusk,Boar", "on the hit list bar: the top")
+    dragRow(state, "Boar", boxRow(state, "Dire Condor").offset + 2)
+    equal(hitNames(state), "Boar,Wolfie,Goretusk", "over a target row: the top")
+    equal(dragRow(state, "Goretusk", 2), true, "over the header: the insertion line stays at the top")
+    equal(hitNames(state), "Goretusk,Boar,Wolfie", "on the header: the top")
+    dragRow(state, "Wolfie", box.height - 1)
+    equal(hitNames(state), "Goretusk,Boar,Wolfie", "on the bottom border: the bottom")
+    equal(dragRow(state, "Boar", -3), false, "above the box: no line")
+    equal(hitNames(state), "Goretusk,Boar,Wolfie", "above the box: cancelled")
+    -- A drop next to itself changes nothing; a drop off the hit list cancels.
+    dragRow(state, "Boar", boxRow(state, "Boar").offset + 2)
+    equal(hitNames(state), "Goretusk,Boar,Wolfie")
+    local row = boxRow(state, "Boar")
+    row.scripts.OnDragStart(row)
+    state.cursorX = -1000
+    row.scripts.OnDragStop(row)
+    equal(hitNames(state), "Goretusk,Boar,Wolfie", "a drop outside the box cancels")
+    -- The X still removes; a target row does not reorder.
+    removeButton(state, "Boar"):Click()
+    equal(hitNames(state), "Goretusk,Wolfie")
+    local target = boxRow(state, "Dire Condor")
+    target.scripts.OnDragStart(target)
+    equal(target.scripts.OnUpdate, nil, "a target row is not dragged")
+end)
+
+test("box: a reorder in combat changes the list at once; the macro waits", function()
+    local saved = {added = {{name = "Goretusk"}, {name = "Boar"}}}
+    local state = fixture({quests = CONDOR_QUEST, focus = 101, saved = saved})
+    local before = state.macro()
+    state.combat = true
+    dragRow(state, "Goretusk", boxRow(state, "Boar").offset + 1)
+    equal(hitNames(state), "Goretusk,Boar")
+    equal(state.last(), "DQT: Moved Goretusk in your hit list. The macro updates after combat.")
+    equal(state.macro(), before, "the macro waits")
+    state.combat = false
+    state.emit("PLAYER_REGEN_ENABLED")
+    state.advance()
+    local macro = state.macro()
+    equal(macro:find("/tar Goretusk", 1, true) > macro:find("/tar Boar", 1, true), true)
+end)
+
+test("box: Ctrl-drag on the header moves the box while locked; a plain click folds", function()
+    local state = fixture({quests = TWO_QUESTS, focus = 2})
+    local box, header = state.dqt.box, boxRows(state)[1]
+    equal(state.toolkit.IsLocked(), true)
+    -- A press, a drag without Ctrl: nothing moves, nothing folds.
+    header.scripts.OnMouseDown(header)
+    header.scripts.OnDragStart(header)
+    equal(box.moving, nil, "locked, no Ctrl: no move")
+    -- A press, a drag with Ctrl, a drop somewhere else.
+    state.env.IsControlKeyDown = function() return true end
+    header.scripts.OnMouseDown(header)
+    header.scripts.OnDragStart(header)
+    equal(box.moving, true, "locked with Ctrl: it moves")
+    box:ClearAllPoints()
+    box:SetPoint("CENTER", state.env.UIParent, "BOTTOMLEFT", 300, 300)
+    header.scripts.OnDragStop(header)
+    header.scripts.OnClick(header)
+    equal(state.env.DyresQuestTargetingDB.box.foldedSections.quest, nil, "a drag does not also fold")
+    local saved = state.env.DyresQuestTargetingDB.box.position
+    equal(math.abs(saved.x - 300) < 1 and math.abs(saved.y - 300) < 1, true, "the free drop is saved")
+    state.env.IsControlKeyDown = function() return false end
+    header.scripts.OnMouseDown(header)
+    header:Click()
+    equal(state.env.DyresQuestTargetingDB.box.foldedSections.quest, true, "a plain click folds the quest's part")
+end)
+
+test("box: two settings fold the quest's part and the hit list at login", function()
+    local defaults = fixture({quests = TWO_QUESTS, focus = 2, realDefaults = true,
+        saved = {added = {{name = "Goretusk"}}}})
+    local db = defaults.env.DyresQuestTargetingDB
+    equal(db.startQuestFolded, false, "the quest's part opens by default")
+    equal(db.startHitListFolded, true, "the hit list starts folded by default")
+    equal(type(boxRow(defaults, "Targets, most wanted first")), "table")
+    equal(boxRow(defaults, "Goretusk"), nil)
+    equal(footerCount(defaults), "Hit list: 1 (hidden)")
+    equal(defaults.settings.DQT_START_QUEST_FOLDED.default, false)
+    equal(defaults.settings.DQT_START_HIT_LIST_FOLDED.default, true)
+    local saved = {startQuestFolded = true, startHitListFolded = true, added = {{name = "Goretusk"}},
+        box = {foldedSections = {targets = true}}}
+    local state = fixture({quests = TWO_QUESTS, focus = 2, saved = saved})
+    local folded = state.env.DyresQuestTargetingDB.box.foldedSections
+    equal(folded.quest and folded.added, true, "both on: all folded at login")
+    equal(#boxLines(state), 1, "the header only")
+    local open = fixture({quests = TWO_QUESTS, focus = 2, saved = {startQuestFolded = false,
+        startHitListFolded = false, added = {{name = "Goretusk"}},
+        box = {foldedSections = {quest = true, added = true, targets = true}}}})
+    local openFolds = open.env.DyresQuestTargetingDB.box.foldedSections
+    equal(openFolds.quest or openFolds.added, nil, "both off: both open, whatever was saved")
+    equal(openFolds.targets, true, "the targets keep their saved fold")
+    equal(type(boxRow(open, "Goretusk")), "table")
+    local old = fixture({saved = {startFolded = true}, realDefaults = true})
+    equal(old.env.DyresQuestTargetingDB.startQuestFolded, true, "a test build's \"Start folded\" becomes the quest's")
+    equal(old.env.DyresQuestTargetingDB.startFolded, nil)
+end)
+
+test("box: its settings, the show switch, and the off state", function()
+    local state = fixture({quests = CONDOR_QUEST, focus = 101})
+    local list = state.registered.initializers
+    local heading
+    for index, object in ipairs(list) do
+        if object.header == "Quest Target Box" then heading = index end
+    end
+    equal(list[heading + 1].setting.variable, "DQT_SHOW_BOX", "the show switch first")
+    equal(list[heading + 1].setting.name, "Show the Quest Target Box")
+    equal(list[heading + 2].setting.variable, "DQT_START_QUEST_FOLDED", "then the two fold switches")
+    equal(list[heading + 3].setting.variable, "DQT_START_HIT_LIST_FOLDED")
+    equal(list[heading + 4].setting.variable, "DQT_BOX_STYLE", "then the style")
+    for _, name in ipairs({"WIDTH", "HEIGHT", "TEXTSIZE", "OPACITY"}) do
+        equal(type(state.settings["DYRE_DYRESQUESTTARGETING_BOX_" .. name]), "table", name)
+    end
+    equal(state.settings.DYRE_DYRESQUESTTARGETING_BOX_SCALE, nil, "no Size: it scaled the text too")
+    equal(state.settings.DYRE_DYRESQUESTTARGETING_BOX_LINES, nil, "rows follow the height and text size")
+    equal(list[#list].button, "Reset size")
+    state.settings.DYRE_DYRESQUESTTARGETING_BOX_OPACITY:SetValue(50)
+    equal(state.dqt.box.alpha, 0.5, "opacity fades the whole box")
+    list[#list].onClick()
+    equal(state.dqt.box:GetSetting("opacity"), 50, "Reset size keeps opacity")
+    state.settings.DQT_SHOW_BOX:SetValue(false)
+    equal(state.dqt.box.shown, false)
+    state.toolkit.Unlock()
+    equal(state.dqt.box.shown, false, "off: hidden, also unlocked")
+    state.toolkit.Lock()
+    state.settings.DQT_SHOW_BOX:SetValue(true)
+    equal(state.dqt.box.shown, true)
+    state.slash("off")
+    equal(state.dqt.box.shown, false, "DQT off: hidden")
+    state.toolkit.Unlock()
+    contains(boxLines(state)[1], "Macro off: /dqt on turns it back on")
+end)
+
+test("box: /dqt unlock and lock ask the toolkit, /dqt reset_box puts the box back, on and off stay", function()
+    local state = fixture({quests = CONDOR_QUEST, focus = 101})
+    local box = state.dqt.box
+    state.clear()
+    state.slash("unlock")
+    equal(state.toolkit.IsLocked(), false)
+    equal(#state.messages, 1, "one line, the toolkit's")
+    contains(state.messages[1], "Dyre: ")
+    equal(box.dyre.mover.shown, true, "the box's outline follows")
+    state.clear()
+    state.slash("LOCK")
+    equal(state.toolkit.IsLocked(), true)
+    equal(#state.messages, 1)
+    contains(state.messages[1], "Dyre: ")
+    equal(box.dyre.mover.shown, false)
+    box.dyre.store.position = {point = "CENTER", relativePoint = "BOTTOMLEFT", x = 100, y = 100}
+    state.slash("reset_box")
+    equal(box.dyre.store.position, nil, "the saved place is gone")
+    equal(box.points[1][1], "TOPRIGHT", "back in its first place")
+    equal(state.last(), "DQT: The Quest Target box is back in its first place.")
+    state.slash("off")
+    equal(state.env.DyresQuestTargetingDB.enabled, false, "/dqt off is still the macro switch")
+    equal(state.toolkit.IsLocked(), true)
+    state.slash("on")
+    equal(state.env.DyresQuestTargetingDB.enabled, true)
+    local old = fixture({oldToolkit = true})
+    old.slash("unlock")
+    contains(old.last(), "needs Dyre's Toolkit 2.0 or later")
+end)
+
+local TOOLKIT_HINT = "The Quest Target box needs Dyre's Toolkit 2.0 or later"
+
+test("toolkit: the TOC requires it and nests under it; Box.lua loads before Options.lua", function()
+    local state = fixture()
+    equal(state.toc.Dependencies, "DyresToolkit")
+    equal(state.toc.Group, "DyresToolkit")
+    lacks(state.toc.OptionalDeps, "DyresToolkit")
+    local text = assert(io.open(ADDON .. ".toc")):read("*a")
+    contains(text, "Macro.lua\nBox.lua\nOptions.lua")
+end)
+
+test("toolkit: the settings page sits under Dyre's AddOns and DQT joins its menu", function()
+    local state = fixture()
+    equal(state.registered.name, "Quest Targeting", "the toolkit says \"Dyre's \" once, in its heading")
+    equal(state.registered.parent, state.home)
+    equal(state.home.name, "Dyre's AddOns")
+    local heading
+    for index, object in ipairs(state.registered.initializers) do
+        if object.header == "Questie Synchronization (Experimental)" then heading = index end
+    end
+    equal(type(heading), "number", "the Questie heading is on the toolkit's page")
+    local member
+    for _, info in ipairs(state.toolkit.AddOns()) do
+        if info.addon == ADDON then member = info end
+    end
+    equal(member.title, "Dyre's Quest Targeting")
+    member.openSettings()
+    equal(state.opened, state.registered:GetID())
     state.opened = nil
     state.slash("")
-    equal(state.opened, "id:Dyre's AddOns/Dyre's Quest Targeting", "/dqt opens DQT's own page")
-    equal(state.said(TOOLKIT_HINT), false, "no install hint with the toolkit")
+    equal(state.opened, state.registered:GetID(), "/dqt opens DQT's own page")
+    equal(state.said(TOOLKIT_HINT), false, "no hint with the toolkit")
 end)
 
-test("without Dyre's Toolkit, DQT keeps its top-level page and says once where to get it", function()
-    local state = fixture()
-    equal(state.registered.name, "Dyre's Quest Targeting")
-    local count = 0
-    for _, message in ipairs(state.messages) do
-        if message:find(TOOLKIT_HINT, 1, true) then count = count + 1 end
+test("toolkit: without Dyre's Toolkit 2, the macro works, with its own page, no box, and one hint", function()
+    for _, options in ipairs({{noToolkit = true}, {oldToolkit = true}}) do
+        options.quests, options.focus = CONDOR_QUEST, 101
+        local state = fixture(options)
+        equal(state.registered.name, PAGE)
+        equal(state.registered.parent, nil, "a top-level page")
+        equal(state.dqt.box, nil, "no box")
+        contains(state.macro(), "/targetexact Dire Condor")
+        local count = 0
+        for _, message in ipairs(state.messages) do
+            if message:find(TOOLKIT_HINT, 1, true) then count = count + 1 end
+        end
+        equal(count, 1)
+        contains(state.messages[3], "install or update it from CurseForge")
+        state.clear()
+        state.emit("PLAYER_ENTERING_WORLD")
+        state.advance()
+        equal(state.said(TOOLKIT_HINT), false, "said at login only")
     end
-    equal(count, 1)
-    contains(state.messages[2] .. state.messages[3], TOOLKIT_HINT)
-    state.clear()
-    state.emit("PLAYER_ENTERING_WORLD")
-    state.advance()
-    equal(state.said(TOOLKIT_HINT), false, "said at login only")
 end)
 
-test("a toolkit without contract 1 or without a page leaves DQT's own page", function()
-    local newer = toolkitGlobal(0)
-    local state = fixture({globals = {DyresToolkit = newer}})
-    equal(state.registered.name, "Dyre's Quest Targeting")
-    equal(#newer.members, 0, "an unknown contract is not used")
-    equal(state.said(TOOLKIT_HINT), false, "installed, so no install hint")
-    local pageless = toolkitGlobal(1, true)
-    local other = fixture({globals = {DyresToolkit = pageless}})
-    equal(other.registered.name, "Dyre's Quest Targeting")
-    equal(#pageless.members, 1, "still in the toolkit's menu")
-    pageless.members[1].openSettings()
-    equal(other.opened, "id:Dyre's Quest Targeting")
+test("toolkit: the copy the tests load matches ../DyresToolkit when it is there", function()
+    for _, path in ipairs(TOOLKIT_FILES) do
+        local own = io.open("../DyresToolkit/" .. path, "rb")
+        if own then
+            local copy = assert(io.open("tests/toolkit/" .. path, "rb"))
+            equal(copy:read("*a") == own:read("*a"), true, "tests/toolkit/" .. path .. " is stale: copy it again")
+            copy:close()
+            own:close()
+        end
+    end
 end)
 
 test("a clash on /dqt is reported, with the backup command", function()

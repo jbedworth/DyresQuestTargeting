@@ -39,7 +39,7 @@ jobs:
           lua5.1 -e 'assert(_VERSION == "Lua 5.1")'
       - name: Check syntax and runtime logic
         run: |
-          luac5.1 -p Commands.lua Core.lua Quest.lua Macro.lua Options.lua tests/run.lua
+          luac5.1 -p Commands.lua Core.lua Quest.lua Macro.lua Box.lua Options.lua tests/run.lua tests/toolkit/*.lua
           lua5.1 tests/run.lua
       - name: Test release tooling
         run: python3 -m unittest discover -s tests -p 'test_*.py' -v
