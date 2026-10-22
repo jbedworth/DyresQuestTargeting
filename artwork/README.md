@@ -25,20 +25,22 @@ chrome --headless=new --hide-scrollbars --window-size=1024,1024 --force-device-s
 
 ## Screenshots
 
-In-game captures by the author on the Forever beta client, saved as PNG in
-`screenshots/`. None are taken yet. Suggested shots:
+In-game captures by the author on the Forever beta client, in `screenshots/`
+(listing captions are in docs/CURSEFORGE_LISTING.md). The two settings
+pages arrived as WebP and are kept as same-size PNG copies.
 
-- `screenshots/macro.png`: the "! Target (DQT)" macro on an action bar, and
-  a skulled quest mob it found.
-- `screenshots/list.png`: `/dqt list` in chat, with the droppers and their
-  drop rates.
-- `screenshots/focus-change.png`: the chat line when the focused quest
-  changes.
-- `screenshots/settings.png`: the settings page, with the Questie
-  Synchronization (Experimental) section.
+- `screenshots/quest-target-box.png`: the Quest Target box, "Dusky Crab Cakes
+  (Questie)", with targets and drop rates, the names left out of the macro,
+  and the hit list bar.
+- `screenshots/settings-macro-and-markers.png`: the settings
+  page, top: the macro, markers, opener, Questie Synchronization, and the
+  start of the Quest Target Box section.
+- `screenshots/settings-quest-target-box.png`: the settings
+  page, scrolled to the Quest Target Box settings.
 
-List each screenshot here once it is added. Retake a screenshot when the
-feature it shows changes visibly.
+Suggested later shots: the macro on an action bar with a skulled quest mob;
+`/dqt list` in chat. Retake a screenshot when the feature it shows changes
+visibly.
 
 This artwork is covered by the repository's MIT License. Copyright (c) 2026
 John Bedworth. Include the applicable license notice with distributed copies.

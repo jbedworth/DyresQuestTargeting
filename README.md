@@ -1,9 +1,11 @@
 # Dyre's Quest Targeting
 
-A targeting macro for World of Warcraft: Forever (beta) that follows the quest
-you are working on. Dyre's Quest Targeting (DQT) keeps one character macro,
-**! Target (DQT)**, up to date with the mobs and NPCs your focused quest
-needs. Put it on an action bar and press it to find, target, and mark the
+Shows your Focused Quest and builds a "hit list" and targeting macro based on
+what you're trying to accomplish.
+
+Dyre's Quest Targeting (DQT), for World of Warcraft: Forever, keeps
+one character macro, **! Target (DQT)**, up to date with the mobs and NPCs
+your focused quest needs. Put it on an action bar and press it to find, target, and mark the
 nearest one. Type `/dqt` for the settings (see [Settings](#settings)).
 Everything is saved per character. Works best with **Questie** and **TomTom**;
 both are optional.
@@ -183,8 +185,8 @@ once the AddOn is installed and on.
 
 ## Compatibility
 
-Built for Forever beta 1.60.1 (build 70450, Interface 16001) and played on
-that build. DQT checks the APIs it needs at login and stays off, saying why,
+Built for World of Warcraft: Forever 1.60.1 (build 70450, Interface 16001)
+and played on that build. DQT checks the APIs it needs at login and stays off, saying why,
 if one is missing. TESTING.md lists the in-client checks.
 
 ## Support

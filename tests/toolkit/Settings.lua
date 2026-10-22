@@ -74,6 +74,50 @@ function DyresToolkit.OpenSettings(category)
     return true
 end
 
+local function Member(addon)
+    for _, info in ipairs(DyresToolkit.AddOns()) do
+        if info.addon == addon then
+            return info
+        end
+    end
+end
+
+-- A row on an AddOn's page that opens another Dyre's AddOn's page (2.3.0;
+-- author-approved: a feature that moved to another AddOn is linked, not
+-- mirrored). opts: addon (folder), name (the row's label), button (default
+-- "Open settings"), tooltip, missing (said in chat, and the tooltip, while
+-- that AddOn has not joined the toolkit: not installed or not enabled). The
+-- button is greyed while it is missing; the check runs each time the page
+-- draws, so an AddOn that joins later counts.
+function DyresToolkit.AddSettingsLink(category, layout, opts)
+    if type(opts) ~= "table" or type(opts.addon) ~= "string" or type(opts.name) ~= "string"
+            or type(CreateSettingsButtonInitializer) ~= "function" or type(layout) ~= "table"
+            or type(layout.AddInitializer) ~= "function" then
+        return nil
+    end
+    local missing = opts.missing or ("Install " .. opts.addon .. " from CurseForge.")
+    local function Open()
+        local info = Member(opts.addon)
+        if not info or type(info.openSettings) ~= "function" then
+            ns.Report(missing)
+            return
+        end
+        if InCombatLockdown() then
+            ns.Report("The settings open out of combat.")
+            return
+        end
+        info.openSettings()
+    end
+    local present = Member(opts.addon) ~= nil
+    local initializer = CreateSettingsButtonInitializer(opts.name, opts.button or "Open settings", Open,
+        present and opts.tooltip or missing, true)
+    if type(initializer.AddModifyPredicate) == "function" then
+        initializer:AddModifyPredicate(function() return Member(opts.addon) ~= nil end)
+    end
+    layout:AddInitializer(initializer)
+    return initializer
+end
+
 local function Flag(variable, name, get, set, tooltip)
     local setting = Settings.RegisterProxySetting(home, variable, Settings.VarType.Boolean, name, false, get, set)
     return Settings.CreateCheckbox(home, setting, tooltip)
