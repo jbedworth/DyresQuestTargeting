@@ -33,10 +33,26 @@ function DyresToolkit.RegisterMovable(frame, save)
     return true
 end
 
+-- A frame's center in its own units. A frame placed by the toolkit (CENTER
+-- on UIParent's bottom left) is read from its anchor: GetCenter makes the
+-- client lay out pending frames now, inside our call, and a Blizzard frame
+-- that changes size then (the objective tracker) runs its update tainted
+-- (found in client, 2026-10-21: GetAuraDataByIndex blocked, "tainted by
+-- DyresToolkit"). Anything else, such as a frame just dragged, uses GetCenter.
+local function Center(frame)
+    if frame:GetNumPoints() == 1 and type(frame.GetPoint) == "function" then
+        local point, relative, relativePoint, x, y = frame:GetPoint(1)
+        if point == "CENTER" and relative == UIParent and relativePoint == "BOTTOMLEFT" then
+            return x, y
+        end
+    end
+    return frame:GetCenter()
+end
+
 -- A frame's center and half size in UIParent units.
 local function Box(frame)
     local ratio = frame:GetEffectiveScale() / UIParent:GetEffectiveScale()
-    local x, y = frame:GetCenter()
+    local x, y = Center(frame)
     return x * ratio, y * ratio, frame:GetWidth() * ratio / 2, frame:GetHeight() * ratio / 2
 end
 
@@ -189,7 +205,7 @@ function DyresToolkit.ResizeFromCenter(frame, scale, width, height, anchor)
     if not scale and not (width and height) then
         return
     end
-    local placed = frame:GetNumPoints() > 0 and frame:GetCenter() ~= nil
+    local placed = frame:GetNumPoints() > 0 and Center(frame) ~= nil
     local x, y, halfWidth, halfHeight
     if placed then
         x, y, halfWidth, halfHeight = Box(frame)
@@ -254,11 +270,11 @@ function DyresToolkit.BeginDrag(frame)
     if not lockedDrag and IsShiftKeyDown() then
         group = SnappedGroup(frame)
         local scale = frame:GetEffectiveScale()
-        local leadX, leadY = frame:GetCenter()
+        local leadX, leadY = Center(frame)
         for index = 2, #group do
             local follower = group[index]
             local followerScale = follower:GetEffectiveScale()
-            local x, y = follower:GetCenter()
+            local x, y = Center(follower)
             follower:ClearAllPoints()
             follower:SetPoint("CENTER", frame, "CENTER", (x * followerScale - leadX * scale) / followerScale,
                 (y * followerScale - leadY * scale) / followerScale)

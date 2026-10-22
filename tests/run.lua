@@ -265,6 +265,17 @@ local function fixture(options)
     if not options.noSettings then
         local function initializer(category, setting, extra, tooltip)
             local object = {setting = setting, options = extra, tooltip = tooltip}
+            -- As the client's: the row is greyed out while a predicate is false.
+            function object:AddModifyPredicate(func)
+                self.predicates = self.predicates or {}
+                self.predicates[#self.predicates + 1] = func
+            end
+            function object:Enabled()
+                for _, func in ipairs(self.predicates or {}) do
+                    if not func() then return false end
+                end
+                return true
+            end
             category.initializers[#category.initializers + 1] = object
             return object
         end
@@ -520,7 +531,7 @@ local CONDOR_QUEST = {[101] = {title = "The Condor Hunt", objectives = {
 
 test("logs in with a banner and makes the character macro", function()
     local state = fixture()
-    contains(state.messages[1], "DQT: Dyre's Quest Targeting 1.1.0 by Dyre")
+    contains(state.messages[1], "DQT: Dyre's Quest Targeting 1.1.1 by Dyre")
     equal(state.said("Ready."), true)
     equal(state.dqt.available, true)
     contains(state.macro(), "nothing to target")
@@ -773,6 +784,40 @@ test("the Questie settings sit under an experimental section heading", function(
     local bare = fixture({noSectionHeaders = true})
     equal(bare.settings.DQT_SYNC_FOCUS.name, "Keep Questie's and the game's focus in sync (experimental)",
         "without headings, the settings are still there")
+end)
+
+-- The settings row for a variable.
+local function settingRow(state, variable)
+    for _, object in ipairs(state.registered.initializers) do
+        if object.setting and object.setting.variable == variable then return object end
+    end
+end
+
+test("Questie and TomTom settings are greyed out without their AddOns; saved values stay", function()
+    local QUESTIE_ROWS = {"DQT_QUESTIE_FOCUS", "DQT_SYNC_FOCUS", "DQT_TOMTOM"}
+    local saved = {questieFocus = true, syncFocus = true, tomtom = true}
+    local none = fixture({quests = TWO_QUESTS, focus = 1, saved = saved})
+    for _, variable in ipairs(QUESTIE_ROWS) do
+        equal(settingRow(none, variable):Enabled(), false, variable .. ": greyed out without Questie")
+    end
+    contains(settingRow(none, "DQT_QUESTIE_FOCUS").tooltip, "Needs Questie: greyed out until it is installed")
+    contains(settingRow(none, "DQT_SYNC_FOCUS").tooltip, "Needs Questie:")
+    contains(settingRow(none, "DQT_TOMTOM").tooltip, "Needs Questie and TomTom:")
+    equal(settingRow(none, "DQT_MARK"):Enabled(), true, "other settings stay on")
+    local db = none.env.DyresQuestTargetingDB
+    equal(db.syncFocus and db.tomtom and db.questieFocus, true, "the saved values stay as they were")
+    local questie = fixture({quests = TWO_QUESTS, focus = 1, questie = {}})
+    equal(settingRow(questie, "DQT_QUESTIE_FOCUS"):Enabled(), true, "Questie: on")
+    equal(settingRow(questie, "DQT_SYNC_FOCUS"):Enabled(), true)
+    equal(settingRow(questie, "DQT_TOMTOM"):Enabled(), false, "Questie without TomTom: TomTom greyed out")
+    local both = fixture({quests = TWO_QUESTS, focus = 1, questie = {}, tomtom = true})
+    for _, variable in ipairs(QUESTIE_ROWS) do
+        equal(settingRow(both, variable):Enabled(), true, variable .. ": on with both")
+    end
+    -- Asked each time the row is drawn: an AddOn that loads later counts.
+    none.env.QuestieLoader = {ImportModule = function() return {} end}
+    none.env.TomTom = {}
+    equal(settingRow(none, "DQT_TOMTOM"):Enabled(), true, "loaded after the page was built")
 end)
 
 local SPAWNS = {[2] = {[2] = {spawn = {40, 60}, zone = 12, name = "Bear"}}}
@@ -2085,6 +2130,7 @@ test("box: its settings, the show switch, and the off state", function()
     for _, name in ipairs({"WIDTH", "HEIGHT", "TEXTSIZE", "OPACITY"}) do
         equal(type(state.settings["DYRE_DYRESQUESTTARGETING_BOX_" .. name]), "table", name)
     end
+    equal(state.settings.DYRE_DYRESQUESTTARGETING_BOX_TEXTSIZE.name, "Text size", "no \"(%)\": the value shows it")
     equal(state.settings.DYRE_DYRESQUESTTARGETING_BOX_SCALE, nil, "no Size: it scaled the text too")
     equal(state.settings.DYRE_DYRESQUESTTARGETING_BOX_LINES, nil, "rows follow the height and text size")
     equal(list[#list].button, "Reset size")

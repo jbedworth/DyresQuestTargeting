@@ -26,6 +26,8 @@ local MAX_OPENER_CAST_MS = 1000
 -- Shown in both Questie settings' tooltips, under their own section heading.
 local EXPERIMENTAL = " Experimental: it uses Questie's own code, not a public API. Use with caution."
 local QUESTIE_HEADING = "Questie Synchronization (Experimental)"
+local NEEDS_QUESTIE = " Needs Questie: greyed out until it is installed and on."
+local NEEDS_QUESTIE_TOMTOM = " Needs Questie and TomTom: greyed out until both are installed and on."
 local BOX_HEADING = "Quest Target Box"
 
 -- Harmful and fast enough to open with. Without the spell APIs, every spell
@@ -170,6 +172,26 @@ local function Marker(variable, name, key, default, tooltip)
     return Dropdown(setting, MarkerChoices, tooltip)
 end
 
+-- Settings that need another AddOn are greyed out without it (author), not
+-- hidden; their saved values stay, so they work once it is installed. The
+-- settings list asks each time it draws the row (an initializer's modify
+-- predicates, Blizzard_SettingControls.lua), so an AddOn that loads after
+-- this page is built counts too. The same globals the features use.
+local function QuestieLoaded()
+    return type(QuestieLoader) == "table"
+end
+
+local function QuestieAndTomTomLoaded()
+    return QuestieLoaded() and type(TomTom) == "table"
+end
+
+local function Needs(initializer, loaded)
+    if type(initializer) == "table" and type(initializer.AddModifyPredicate) == "function" then
+        initializer:AddModifyPredicate(loaded)
+    end
+    return initializer
+end
+
 -- A section heading, as Blizzard's Controls page adds them
 -- (Blizzard_SettingControls.lua); without it the names still say what they are.
 local function Heading(text)
@@ -194,9 +216,10 @@ function DQT.InitializeOptions()
     Flag("DQT_ENABLED", "Keep the macro up to date", "enabled", true,
         "Rewrite the macro \"" .. DQT.MACRO_NAME .. "\" with the mobs and NPCs your focused quest "
             .. "needs, out of combat. Off leaves the macro as it is. /dqt on and /dqt off do the same.")
-    Flag("DQT_QUESTIE_FOCUS", "Follow Questie's tracker focus", "questieFocus", true,
+    Needs(Flag("DQT_QUESTIE_FOCUS", "Follow Questie's tracker focus", "questieFocus", true,
         "With Questie installed, also follow the quest (or objective) you focus in Questie's tracker; "
-            .. "whichever focus you set last wins. Off: only the game's quest log and map focus count.")
+            .. "whichever focus you set last wins. Off: only the game's quest log and map focus count."
+            .. NEEDS_QUESTIE), QuestieLoaded)
     Flag("DQT_MARK", "Mark what the macro finds", "mark", true,
         "Put a raid marker on the mob or NPC the macro finds, so it is easy to spot.")
     Marker("DQT_MOB_MARKER", "Marker for mobs", "mobMarker", DQT.DEFAULT_MOB_MARKER,
@@ -224,10 +247,10 @@ function DQT.InitializeOptions()
             .. "switching, put the new macro on your bars and delete the old one.")
     -- Without headings, the names still say experimental.
     Heading(QUESTIE_HEADING)
-    Flag("DQT_SYNC_FOCUS", "Keep Questie's and the game's focus in sync (experimental)", "syncFocus", false,
+    Needs(Flag("DQT_SYNC_FOCUS", "Keep Questie's and the game's focus in sync (experimental)", "syncFocus", false,
         "With Questie installed: focusing a quest in Questie's tracker also focuses it in the game's quest "
             .. "log and map, and the other way round. A Questie objective focus gives the game its quest. "
-            .. "Needs \"Follow Questie's tracker focus\"." .. EXPERIMENTAL)
+            .. "Needs \"Follow Questie's tracker focus\"." .. EXPERIMENTAL .. NEEDS_QUESTIE), QuestieLoaded)
     local tomtom = Proxy("DQT_TOMTOM", Settings.VarType.Boolean, "Point TomTom at the focused quest (experimental)", false,
         function() return DQT.db.tomtom end,
         function(value)
@@ -237,11 +260,11 @@ function DQT.InitializeOptions()
                 DQT.PointTomTom(DQT.current.quest, DQT.current.kept, true)
             end
         end)
-    Settings.CreateCheckbox(category, tomtom,
+    Needs(Settings.CreateCheckbox(category, tomtom,
         "With Questie and TomTom installed: points the TomTom arrow at the nearest of the quest mobs "
             .. "the macro looks for (the best droppers, for a quest item), or at the turn-in once the quest is "
             .. "done. It moves when the focused quest or objective changes, an objective is done, or the quest "
-            .. "is ready to turn in." .. EXPERIMENTAL)
+            .. "is ready to turn in." .. EXPERIMENTAL .. NEEDS_QUESTIE_TOMTOM), QuestieAndTomTomLoaded)
     Heading(BOX_HEADING)
     Flag("DQT_SHOW_BOX", "Show the Quest Target Box", "showBox", true,
         "A box with your focused quest, what the macro looks for (with drop rates), the names left out, and your "

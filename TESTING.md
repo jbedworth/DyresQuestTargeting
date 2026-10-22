@@ -204,6 +204,12 @@ With `/dqt debug` for details:
     the game's). Then focus another quest in the game's quest log: that one
     wins. Unfocus in Questie: the game's focus again. Relog with a Questie
     focus set: Questie's wins.
+28. Without Questie and TomTom (both off in the AddOn list, `/reload`):
+    "Follow Questie's tracker focus", "Keep Questie's and the game's focus
+    in sync", and "Point TomTom at the focused quest" are greyed out, and
+    their tooltips say what they need. Questie on, TomTom off: only the
+    TomTom setting is greyed out. Both on: none. The checks keep their
+    values across these.
 14. "Keep Questie's and the game's focus in sync" on: Focus Quest in
     Questie's tracker moves the game's focus (the map's quest arrow) to it.
     Focus another quest in the game's quest log: Questie's tracker focuses it

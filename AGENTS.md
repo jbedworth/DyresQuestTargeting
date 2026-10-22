@@ -141,6 +141,15 @@ Both are marked experimental (author): under the settings section heading
 `CreateSettingsListSectionHeaderInitializer`), "(experimental)" in the
 setting names, a caution in their tooltips, README, CHANGELOG, and listing.
 
+Without their AddOns (author, 1.1.1), "Follow Questie's tracker focus" and
+"Keep Questie's and the game's focus in sync" (Questie) and "Point TomTom at
+the focused quest" (Questie and TomTom) are greyed out, not hidden, with a
+tooltip line that names what they need; saved values stay as they are. The
+check is an initializer modify predicate (`AddModifyPredicate`,
+Blizzard_SettingControls.lua), which the settings list runs each time it
+draws the row, so an AddOn that loads after the page is built counts; it
+tests the same globals the features use (`QuestieLoader`, `TomTom`).
+
 - "Keep Questie's and the game's focus in sync" (`db.syncFocus`; needs
   "Follow Questie's tracker focus"): the focus you change last is copied to
   the other side. Questie's is set as its tracker menu sets it
@@ -322,6 +331,11 @@ minimap menu, and widgets (contract 2). The Quest Target box is a widget.
   Questie; see above.)
 - Interacting with the found NPC by turning the same key into
   `INTERACTTARGET` out of combat (two presses).
+- Not built (author, 2026-10-21: "not worth it"): without Questie, pointing
+  TomTom at the quest's map icon (`C_QuestLog.GetQuestsOnMap`; the game's own
+  super-track arrow already points there) and turn-in names parsed from
+  `GetQuestLogCompletionText`. No client API gives item droppers or
+  objective NPC IDs.
 
 ## Project structure
 

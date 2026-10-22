@@ -52,7 +52,7 @@ function ns.SanitizeDB(db)
         db.grid = true
     end
     if type(db.snapToGrid) ~= "boolean" then
-        db.snapToGrid = false
+        db.snapToGrid = true
     end
     local size = tonumber(db.gridSize)
     if not size or size ~= size then

@@ -139,7 +139,9 @@ box, and chat says once at login to update the toolkit from CurseForge.
 
 ## Without Questie
 
-Questie is optional.
+Questie is optional. Without it, the settings that need Questie (or
+Questie and TomTom) are greyed out; they keep their values and work again
+once the AddOn is installed and on.
 
 - **Neither Questie nor QuestieDB:** the macro follows the game's focus (quest
   log and map) and targets kill objectives only; `/dqt list` says QuestieDB is not

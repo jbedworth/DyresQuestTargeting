@@ -21,7 +21,7 @@ local SIZES = {
     width = {min = 180, max = 400, step = 10, default = 240},
     height = {min = 120, max = 600, step = 5, default = 235},
     opacity = true,
-    textSize = {min = 80, max = 150, step = 5, default = 100, label = "Text size (%)", percent = true},
+    textSize = {min = 80, max = 150, step = 5, default = 100, label = "Text size", percent = true},
 }
 local SIZE_ORDER = {"width", "height", "textSize", "opacity"}
 -- "Reset size" keeps opacity, as every Dyre's AddOn does.

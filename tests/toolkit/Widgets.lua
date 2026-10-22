@@ -22,7 +22,7 @@ local DyresToolkit = ns.toolkit
 
 local DEFAULT_KEYS = {position = "position", scale = "scale", width = "width", height = "height",
     opacity = "opacity"}
-local LABELS = {scale = "Size (%)", width = "Width", height = "Height", opacity = "Opacity"}
+local LABELS = {scale = "Size", width = "Width", height = "Height", opacity = "Opacity"}
 local PERCENT = {scale = true, opacity = true}
 local DEFAULT_SCALE = {min = 50, max = 150, step = 5, default = 100}
 local DEFAULT_OPACITY = {min = 10, max = 100, step = 5, default = 100}

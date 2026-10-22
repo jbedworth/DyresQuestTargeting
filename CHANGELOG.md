@@ -3,6 +3,13 @@
 Player-facing changes for each Dyre's Quest Targeting release, newest first. The
 release builder puts the matching section at the top of each release's notes.
 
+## 1.1.1
+
+### Other changes
+
+- Without Questie, "Follow Questie's tracker focus" and "Keep Questie's and the game's focus in sync" are greyed out in the settings; without Questie and TomTom, so is "Point TomTom at the focused quest". Their tooltips say what they need, and they keep their values, so they work again once the AddOn is installed.
+- Size sliders are labeled without "(%)": their values already show the % sign.
+
 ## 1.1.0
 
 ### Features
