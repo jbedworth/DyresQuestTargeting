@@ -60,6 +60,29 @@ prefix `DQT:`. Listings say plainly that it is for WoW: Forever.
 
 ### Names (built)
 
+- Classic Era and Anniversary (author, 1.2.0: "fall back to [Questie's
+  focus] in classic and only not initialize if both are unavailable"): those
+  clients have no C_SuperTrack or SUPER_TRACKING_CHANGED (their source uses it
+  only in the Cata and Mists map files), no C_QuestLog.GetLogIndexForQuestID,
+  IsComplete, or GetTitleForQuestID, and no C_SpellBook functions. DQT follows
+  the game's focus (`DQT.HasGameFocus`) or Questie's tracker focus
+  (`DQT.QuestieFocusAvailable`: QuestieLoader and TrackerUtils.FocusQuest).
+  With neither (Classic without Questie), DQT still starts (author: "still
+  useful for manually maintained hit-list mobs"): quest targeting is off, the
+  macro keeps the hit list, one chat line at login says so, the box header
+  reads "No quest focus: install Questie", and `/dqt list` says the same. Without the game's
+  focus, Questie's is the only one: "Follow Questie's tracker focus" shows on
+  and greyed (its saved value is ignored), the sync is greyed and does
+  nothing, and SUPER_TRACKING_CHANGED is not registered (an unknown event is
+  an error). Core's `DQT.QuestLogIndex`, `QuestTitle`, and `QuestComplete`
+  use C_QuestLog where present, else GetQuestLogIndexByID (0 when absent) and
+  GetQuestLogTitle (the sixth return is 1 when complete). The opener list
+  falls back to GetNumSpellTabs, GetSpellTabInfo, GetSpellBookItemName
+  ("Rank N"), and IsPassiveSpell. QuestieDB on Era ships QuestieDB_Vanilla.toc
+  and QuestieDB_TBC.toc with contract 4 (Era's Questie uses LibQuestieDB
+  too), so the same reads are used; a missing or older contract falls back to
+  kill objectives as everywhere. The TOC stays Interface 16001 for now
+  (players tick "Load out of date AddOns"); release plumbing comes later.
 - Only the focused quest counts (author-approved): the game's (the
   super-tracked quest, `C_SuperTrack.GetSuperTrackedQuestID`,
   `SUPER_TRACKING_CHANGED`) or Questie's tracker focus (author-approved: read
@@ -244,7 +267,15 @@ minimap menu, and widgets (contract 2). The Quest Target box is a widget.
   is a compact card: border, header bar, gap, objective line, gap, footer
   bar, border. Add (the plus texture): a click
   adds your target with similar names, a Shift-click the exact name; tooltip
-  "Add your target to the hit list. Shift-click to match the exact name."
+  "Add your target to the hit list. Shift-click to match the exact name.
+  With no target, type a name." With no target, out of combat (author,
+  1.2.0), the plus opens a small panel under the box (not a popup in the
+  middle of the screen): "Mob name to add" (or "(exact name)" after a
+  Shift-click), a one-line edit box with the focus, Add and Cancel. Enter or
+  Add adds the trimmed name through `/dqt add` or `add_exact`'s code (the
+  same checks, duplicates, and 20-name limit); Escape, Cancel, or an empty
+  name closes it. Never in combat (the plus then says "Target a mob or type
+  a name." as before), and PLAYER_REGEN_DISABLED closes it.
   Clear (the red X texture): clears the hit list (no question asked, no
   popup); disabled and desaturated when empty; tooltip "Clear the hit
   list."
@@ -304,8 +335,12 @@ minimap menu, and widgets (contract 2). The Quest Target box is a widget.
   Height, and Text size, and keeps Opacity. A long list is cut: rows are
   shared out between open sections one at a time, and a cut section's last
   row is "+N more: /dqt list shows all".
-- Shown when on, and frames are unlocked or there is a focused quest or a
-  hit list; DQT off shows it only unlocked. The box itself takes clicks only
+- Shown whenever "Show the Quest Target Box" is on and DQT is on (author,
+  1.2.0: also with no focused quest, "otherwise we can't add to our hitlist
+  without a macro"); DQT off shows it only unlocked. With no focused quest,
+  the line under the header says how to focus one (Questie's tracker where
+  the game has no focus; the quest log, map, or Questie's tracker on
+  Forever), and the hit list stays usable. The box itself takes clicks only
   while unlocked (toolkit mouse "unlocked"); the header and the footer icons
   are drag handles, so a Ctrl-drag on them moves the box while locked
   (toolkit 2.2.0's free move, family-wide, author-approved). A press that
@@ -382,7 +417,8 @@ minimap menu, and widgets (contract 2). The Quest Target box is a widget.
   documentation and FrameXML as authoritative; Retail and Classic examples are
   references only. Forever is game type "Camelot" (`WOW_PROJECT_ID` 18).
 - Do not gate the runtime on client version, build, Interface, or class. Gate
-  only on required APIs (Core's `REQUIRED_APIS`).
+  only on required APIs (Core's `REQUIRED_APIS`; an entry may list
+  alternatives, any one of which is enough) and on a quest focus to follow.
 - The target client has Midnight's secret values and AddOn restrictions. Never
   compare, concatenate, index, or print a value that may be secret: check
   `DQT.IsSecret` first and print with `DQT.Describe`.

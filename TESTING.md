@@ -112,8 +112,9 @@ With `/dqt debug` for details:
 19. With other AddOns' settings dropdowns opened first (for example a Dyre's
     Sounds sound picker in Mage Tools Forever), DQT's three dropdowns still
     show their own choice (Skull, Triangle, Nothing), not a sound name.
-21. Quest Target box content: with no focused quest and an empty hit list it
-    is hidden; `/dqt unlock` shows it with "No focused quest". Focus a quest
+21. Quest Target box content: with no focused quest it shows "No focused
+    quest" and a line on how to focus one; the plus, the X, and "Hit list"
+    still work (also with "Start the hit list folded" on). Focus a quest
     in the quest log: the header is "<quest> (Focus)" on its dark inset, then
     the targets most wanted first. Focus Objective in Questie: "<quest>
     (Questie)" and "Objective: ...". A quest item: "drops <item>" with the
@@ -130,7 +131,11 @@ With `/dqt debug` for details:
     but the icons (also the empty space beside them) shows or hides the names. Hover: the plus says "Add your target to
     the hit list. Shift-click to match the exact name."; the X says "Clear
     the hit list." A click on the plus adds your target (similar names), a
-    Shift-click the exact name, with the same chat line as `/dqt add`; a
+    Shift-click the exact name, with the same chat line as `/dqt add`. With
+    no target, out of combat, a small panel opens under the box with the
+    cursor in its edit box: type a name and press Enter (or Add) to add it;
+    Escape or Cancel closes it; in combat it does not open, and combat
+    closes it; a
     row's red X removes that name; the footer X empties the list and greys
     out. In combat the
     box changes at once, chat says the macro updates after combat, and it
@@ -210,6 +215,15 @@ With `/dqt debug` for details:
     their tooltips say what they need. Questie on, TomTom off: only the
     TomTom setting is greyed out. Both on: none. The checks keep their
     values across these.
+29. Classic Era (and Anniversary), "Load out of date AddOns" ticked: with
+    Questie, DQT starts (no "lacks" line); focus a quest in Questie's
+    tracker: the macro and the box follow it. "Follow Questie's tracker
+    focus" is on and greyed, the sync setting greyed, both tooltips say why.
+    "On a mob, also" lists your spells and ranks. A quest item quest lists
+    droppers (QuestieDB contract 4). Questie disabled, `/reload`: one chat
+    line says quest targeting is off and the macro keeps your hit list;
+    `/dqt add` on a target puts it in the macro and the box (header "No
+    quest focus: install Questie"); no Lua errors.
 14. "Keep Questie's and the game's focus in sync" on: Focus Quest in
     Questie's tracker moves the game's focus (the map's quest arrow) to it.
     Focus another quest in the game's quest log: Questie's tracker focuses it

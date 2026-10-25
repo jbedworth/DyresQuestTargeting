@@ -3,6 +3,15 @@
 Player-facing changes for each Dyre's Quest Targeting release, newest first. The
 release builder puts the matching section at the top of each release's notes.
 
+## 1.2.0
+
+### Features
+
+- WoW Classic Era and Anniversary: the game has no quest focus there, so DQT follows Questie's tracker focus. Without Questie, quest targeting is off, but the macro and the box still keep your hit list; chat says so at login.
+- The Quest Target box shows also with no focused quest, with a line on how to focus one, so you can always change the hit list from it.
+- With no target, the hit list's plus opens a small box under the Quest Target box to type a mob's name (Shift-click for the exact name). It never opens in combat.
+- On those clients, "Follow Questie's tracker focus" shows on and greyed (it is the only focus), "Keep Questie's and the game's focus in sync" is greyed (nothing to sync), and the "On a mob, also" list reads your spellbook there too.
+
 ## 1.1.1
 
 ### Other changes

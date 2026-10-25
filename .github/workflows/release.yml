@@ -141,13 +141,14 @@ jobs:
           CF_API_TOKEN: ${{ secrets.CF_API_TOKEN }}
           CF_PROJECT_ID: ${{ vars.CURSEFORGE_PROJECT_ID }}
           CF_GAME_VERSION_ID: ${{ vars.CURSEFORGE_GAME_VERSION_ID }}
+          CF_CLASSIC_GAME_VERSION_ID: ${{ vars.CURSEFORGE_CLASSIC_GAME_VERSION_ID }}
           RELEASE_TAG: ${{ github.ref_name }}
         run: |
           if [[ "$GITHUB_RUN_ATTEMPT" != 1 ]]; then
             echo 'CurseForge re-run refused. Check the dashboard for an accepted upload before a controlled retry.' >&2
             exit 1
           fi
-          python3 scripts/publish_curseforge.py --artifact-dir dist --project-id "$CF_PROJECT_ID" --game-version-id "$CF_GAME_VERSION_ID" --tag "$RELEASE_TAG"
+          python3 scripts/publish_curseforge.py --artifact-dir dist --project-id "$CF_PROJECT_ID" --game-version-id "$CF_GAME_VERSION_ID" --classic-game-version-id "$CF_CLASSIC_GAME_VERSION_ID" --tag "$RELEASE_TAG"
       - name: Retain upload receipt
         if: always()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2

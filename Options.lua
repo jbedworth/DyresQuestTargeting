@@ -27,6 +27,8 @@ local MAX_OPENER_CAST_MS = 1000
 local EXPERIMENTAL = " Experimental: it uses Questie's own code, not a public API. Use with caution."
 local QUESTIE_HEADING = "Questie Synchronization (Experimental)"
 local NEEDS_QUESTIE = " Needs Questie: greyed out until it is installed and on."
+local NO_GAME_FOCUS = " This client has no quest focus of its own, so DQT always follows Questie's."
+local NO_GAME_SYNC = " This client has no quest focus of its own, so there is nothing to sync."
 local NEEDS_QUESTIE_TOMTOM = " Needs Questie and TomTom: greyed out until both are installed and on."
 local BOX_HEADING = "Quest Target Box"
 
@@ -55,21 +57,57 @@ end
 -- or "Name" for a spell without ranks; only openers (IsOpenerSpell). The
 -- spellbook APIs return no secrets (SpellBookDocumentation.lua); read when
 -- the dropdown opens.
+-- Classic Era and Anniversary have no C_SpellBook functions, only the older
+-- tab API (their SpellBookFrame.lua: GetSpellTabInfo, GetSpellBookItemName
+-- with its "Rank N" subName, IsPassiveSpell).
+local OLD_BOOK = "spell"
+
+local function OldSpellbook(addRanks)
+    if type(GetNumSpellTabs) ~= "function" or type(GetSpellTabInfo) ~= "function"
+            or type(GetSpellBookItemName) ~= "function" then
+        return
+    end
+    for tab = 1, GetNumSpellTabs() do
+        local _, _, offset, numSlots = GetSpellTabInfo(tab)
+        if type(offset) == "number" and type(numSlots) == "number" then
+            for slot = offset + 1, offset + numSlots do
+                local name, subName = GetSpellBookItemName(slot, OLD_BOOK)
+                local passive = type(IsPassiveSpell) == "function" and IsPassiveSpell(slot, OLD_BOOK)
+                if type(name) == "string" and not passive then
+                    addRanks(name, subName)
+                end
+            end
+        end
+    end
+end
+
 local function SpellbookSpells()
     local spells, seen = {}, {}
     local book = C_SpellBook
     local enum = type(Enum) == "table" and Enum
-    if type(book) ~= "table" or type(book.GetNumSpellBookSkillLines) ~= "function"
-            or type(book.GetSpellBookSkillLineInfo) ~= "function" or type(book.GetSpellBookItemInfo) ~= "function"
-            or not (enum and enum.SpellBookSpellBank and enum.SpellBookItemType) then
-        return spells
-    end
     local function Add(name)
         name = DQT.CheckOpener(name)
         if name and name ~= "" and name ~= DQT.OPENER_ATTACK and not seen[name] and IsOpenerSpell(name) then
             seen[name] = true
             spells[#spells + 1] = name
         end
+    end
+    local function AddRanks(name, subName)
+        local rank = type(subName) == "string" and tonumber(subName:match("^Rank (%d+)$"))
+        if rank then
+            for each = 1, rank do
+                Add(name .. "(Rank " .. each .. ")")
+            end
+        else
+            Add(name)
+        end
+    end
+    if type(book) ~= "table" or type(book.GetNumSpellBookSkillLines) ~= "function"
+            or type(book.GetSpellBookSkillLineInfo) ~= "function" or type(book.GetSpellBookItemInfo) ~= "function"
+            or not (enum and enum.SpellBookSpellBank and enum.SpellBookItemType) then
+        OldSpellbook(AddRanks)
+        table.sort(spells)
+        return spells
     end
     for line = 1, book.GetNumSpellBookSkillLines() do
         local info = book.GetSpellBookSkillLineInfo(line)
@@ -78,14 +116,7 @@ local function SpellbookSpells()
                 local item = book.GetSpellBookItemInfo(slot, enum.SpellBookSpellBank.Player)
                 if type(item) == "table" and item.itemType == enum.SpellBookItemType.Spell and not item.isPassive
                         and not item.isOffSpec and type(item.name) == "string" then
-                    local rank = type(item.subName) == "string" and tonumber(item.subName:match("^Rank (%d+)$"))
-                    if rank then
-                        for each = 1, rank do
-                            Add(item.name .. "(Rank " .. each .. ")")
-                        end
-                    else
-                        Add(item.name)
-                    end
+                    AddRanks(item.name, item.subName)
                 end
             end
         end
@@ -181,6 +212,12 @@ local function QuestieLoaded()
     return type(QuestieLoader) == "table"
 end
 
+-- Without the game's focus (Classic Era, Anniversary), Questie's is the only
+-- one: its follow switch shows on and greyed, and the sync has nothing to sync.
+local function CanChooseQuestieFocus()
+    return QuestieLoaded() and DQT.HasGameFocus()
+end
+
 local function QuestieAndTomTomLoaded()
     return QuestieLoaded() and type(TomTom) == "table"
 end
@@ -216,10 +253,16 @@ function DQT.InitializeOptions()
     Flag("DQT_ENABLED", "Keep the macro up to date", "enabled", true,
         "Rewrite the macro \"" .. DQT.MACRO_NAME .. "\" with the mobs and NPCs your focused quest "
             .. "needs, out of combat. Off leaves the macro as it is. /dqt on and /dqt off do the same.")
-    Needs(Flag("DQT_QUESTIE_FOCUS", "Follow Questie's tracker focus", "questieFocus", true,
+    local questieFocus = Proxy("DQT_QUESTIE_FOCUS", Settings.VarType.Boolean, "Follow Questie's tracker focus", true,
+        function() return DQT.db.questieFocus or not DQT.HasGameFocus() end,
+        function(value)
+            DQT.db.questieFocus = value == true
+            DQT.Refresh()
+        end)
+    Needs(Settings.CreateCheckbox(category, questieFocus,
         "With Questie installed, also follow the quest (or objective) you focus in Questie's tracker; "
             .. "whichever focus you set last wins. Off: only the game's quest log and map focus count."
-            .. NEEDS_QUESTIE), QuestieLoaded)
+            .. (DQT.HasGameFocus() and NEEDS_QUESTIE or NO_GAME_FOCUS)), CanChooseQuestieFocus)
     Flag("DQT_MARK", "Mark what the macro finds", "mark", true,
         "Put a raid marker on the mob or NPC the macro finds, so it is easy to spot.")
     Marker("DQT_MOB_MARKER", "Marker for mobs", "mobMarker", DQT.DEFAULT_MOB_MARKER,
@@ -250,7 +293,8 @@ function DQT.InitializeOptions()
     Needs(Flag("DQT_SYNC_FOCUS", "Keep Questie's and the game's focus in sync (experimental)", "syncFocus", false,
         "With Questie installed: focusing a quest in Questie's tracker also focuses it in the game's quest "
             .. "log and map, and the other way round. A Questie objective focus gives the game its quest. "
-            .. "Needs \"Follow Questie's tracker focus\"." .. EXPERIMENTAL .. NEEDS_QUESTIE), QuestieLoaded)
+            .. "Needs \"Follow Questie's tracker focus\"." .. EXPERIMENTAL
+            .. (DQT.HasGameFocus() and NEEDS_QUESTIE or NO_GAME_SYNC)), CanChooseQuestieFocus)
     local tomtom = Proxy("DQT_TOMTOM", Settings.VarType.Boolean, "Point TomTom at the focused quest (experimental)", false,
         function() return DQT.db.tomtom end,
         function(value)

@@ -55,7 +55,11 @@ local LINE_GAP = 3
 -- text sizes shows a mark just under the title's letters (author: "slightly
 -- smaller than the title text").
 local ICON_FACTOR = 1.4
-local ADD_TIP = "Add your target to the hit list. Shift-click to match the exact name."
+local ADD_TIP = "Add your target to the hit list. Shift-click to match the exact name. With no target, type a name."
+local INPUT_PROMPT = "Mob name to add"
+local INPUT_PROMPT_EXACT = "Mob name to add (exact name)"
+-- The edit box and the buttons, in pixels.
+local INPUT_ROW = 20
 local CLEAR_TIP = "Clear the hit list."
 local HIT_LIST_TIP = "Show or hide the hit list."
 -- The empty strip above the footer (room to drop a dragged name last), in
@@ -75,7 +79,7 @@ local DEFAULT_FONT = "Fonts\\FRIZQT__.TTF"
 local GREY_CODE = "|cff9d9d9d"
 local GOLD_CODE = "|cffffd100"
 
-local box, header, objectiveRow, rows, footer, insertLine, strip
+local box, header, objectiveRow, rows, footer, insertLine, strip, input
 -- The hit list rows shown, top to bottom, each with its offset from the
 -- box's top (for the drop place); hitRows.line is the row height.
 local hitRows = {}
@@ -126,11 +130,35 @@ local function StripHeight(bar)
     return math.floor(bar * STRIP_FACTOR + 0.5)
 end
 
--- Where the section rows start: under the header bar and the objective line.
+-- The line under the header: the focused objective, or, with no quest
+-- focused, how to focus one (author: the box shows without a focus, so the
+-- hit list can be changed). Plain text and the colored text, or nil.
+local function SubLine()
+    local quest = Quest()
+    if quest then
+        if quest.objectiveText then
+            return "Objective: " .. quest.objectiveText, GREY_CODE .. "Objective: |r" .. quest.objectiveText
+        end
+        return nil
+    end
+    if not DQT.db.enabled or not DQT.CanFollowQuests() then
+        return nil
+    end
+    local hint
+    if not DQT.HasGameFocus() then
+        hint = "Focus a quest in Questie's tracker (right-click a quest)."
+    elseif DQT.QuestieFocusAvailable() then
+        hint = "Focus a quest in the quest log, on the map, or in Questie's tracker."
+    else
+        hint = "Focus a quest in the quest log or on the map."
+    end
+    return hint, GREY_CODE .. hint .. "|r"
+end
+
+-- Where the section rows start: under the header bar and the line under it.
 local function RowsTop(widget)
     local _, line, bar = Metrics(widget)
-    local quest = Quest()
-    return BORDER_INSET + bar + LINE_GAP + (quest and quest.objectiveText and line or 0)
+    return BORDER_INSET + bar + LINE_GAP + (SubLine() and line or 0)
 end
 
 local function SetFontSize(fontString, size)
@@ -424,7 +452,8 @@ local function HeaderText()
     end
     local quest = Quest()
     if not quest then
-        return GREY_CODE .. "No focused quest|r", "No focused quest"
+        local text = DQT.CanFollowQuests() and "No focused quest" or "No quest focus: install Questie"
+        return GREY_CODE .. text .. "|r", text
     end
     local plain = quest.title .. " (" .. (quest.via == "Questie" and "Questie" or "Focus") .. ")"
         .. (quest.complete and " · ready to turn in" or "")
@@ -482,8 +511,7 @@ local function Layout(widget)
     local spots = {quest = quest, hit = hit, rowsTop = RowsTop(widget)}
     local y = spots.rowsTop + #quest * line
     if AllFolded() then
-        local current = Quest()
-        y = BORDER_INSET + bar + (current and current.objectiveText and (line + LINE_GAP * 2) or LINE_GAP)
+        y = BORDER_INSET + bar + (SubLine() and (line + LINE_GAP * 2) or LINE_GAP)
         spots.barTop = y
         spots.height = y + bar + BORDER_INSET
         return spots
@@ -535,14 +563,13 @@ local function Render()
     header.full = plain
     SetFontSize(header.label, size)
     header.label:SetText(text)
-    local quest = Quest()
-    if quest and quest.objectiveText then
+    local subPlain, subText = SubLine()
+    if subPlain then
         local top = BORDER_INSET + headerHeight + LINE_GAP
         objectiveRow:ClearAllPoints()
         objectiveRow:SetPoint("TOPLEFT", box, "TOPLEFT", PADDING, -top)
         objectiveRow:SetPoint("TOPRIGHT", box, "TOPRIGHT", -PADDING, -top)
-        Fill(objectiveRow, {text = GREY_CODE .. "Objective: |r" .. quest.objectiveText,
-            full = "Objective: " .. quest.objectiveText}, size, line)
+        Fill(objectiveRow, {text = subText, full = subPlain}, size, line)
     else
         objectiveRow:Hide()
     end
@@ -581,8 +608,8 @@ local function Render()
     footer.clear.icon:SetDesaturated(empty)
 end
 
--- Shown when on, and either frames are unlocked (to move it) or there is
--- something to show: a focused quest or a hit list.
+-- Shown when on (author: also with no focused quest, so the hit list can be
+-- changed without a macro); with DQT off, only while frames are unlocked.
 local function Wanted()
     if not DQT.db.showBox then
         return false
@@ -591,7 +618,7 @@ local function Wanted()
     if toolkit and not toolkit.IsLocked() then
         return true
     end
-    return DQT.db.enabled and (Quest() ~= nil or #DQT.db.added > 0)
+    return DQT.db.enabled == true
 end
 
 -- Colors only, so a change applies at once, also in combat.
@@ -612,6 +639,87 @@ function DQT.ApplyBoxStyle()
     if strip.SetBackdropColor then
         strip:SetBackdropColor(style.header[1], style.header[2], style.header[3], style.header[4])
     end
+    if input and input.SetBackdropColor then
+        input:SetBackdropColor(style.panel[1], style.panel[2], style.panel[3], style.panel[4])
+        input:SetBackdropBorderColor(GOLD[1], GOLD[2], GOLD[3])
+    end
+end
+
+-- The name input (author): the plus with no target opens a small panel under
+-- the box to type a mob's name; never in combat (no popups in combat), and
+-- combat closes it. Enter or Add adds the name as /dqt add (or add_exact)
+-- does; Escape, Cancel, or an empty name closes it.
+local function CloseNameInput()
+    if input then
+        input.edit:ClearFocus()
+        input:Hide()
+    end
+end
+
+local function SubmitNameInput()
+    local text = input.edit:GetText()
+    local exact = input.exact
+    CloseNameInput()
+    text = type(text) == "string" and text:match("^%s*(.-)%s*$") or ""
+    if text == "" then
+        return
+    end
+    if exact then
+        DQT.AddExact(text)
+    else
+        DQT.AddSimilar(text)
+    end
+end
+
+local function OpenNameInput(exact)
+    if InCombatLockdown() then
+        return false
+    end
+    local size, line = Metrics(box)
+    input.exact = exact
+    input.prompt:SetText(exact and INPUT_PROMPT_EXACT or INPUT_PROMPT)
+    SetFontSize(input.prompt, size)
+    input:SetHeight(PADDING * 2 + line + INPUT_ROW * 2 + BUTTON_GAP * 2)
+    input.edit:SetText("")
+    input:Show()
+    input.edit:SetFocus()
+    return true
+end
+
+local function InputButton(parent, label, onClick)
+    local button = CreateFrame("Button", nil, parent, "UIPanelButtonTemplate")
+    button:SetText(label)
+    button:SetScript("OnClick", onClick)
+    return button
+end
+
+local function CreateNameInput()
+    input = CreateFrame("Frame", nil, box, "BackdropTemplate")
+    if input.SetBackdrop then
+        input:SetBackdrop(BACKDROP)
+    end
+    input:SetPoint("TOPLEFT", box, "BOTTOMLEFT", 0, -BUTTON_GAP)
+    input:SetPoint("TOPRIGHT", box, "BOTTOMRIGHT", 0, -BUTTON_GAP)
+    input.prompt = input:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+    input.prompt:SetPoint("TOPLEFT", input, "TOPLEFT", PADDING, -PADDING)
+    input.edit = CreateFrame("EditBox", nil, input, "InputBoxTemplate")
+    input.edit:SetAutoFocus(false)
+    input.edit:SetMaxLetters(DQT.MaxNameLength())
+    input.edit:SetHeight(INPUT_ROW)
+    input.edit:SetPoint("TOPLEFT", input.prompt, "BOTTOMLEFT", BUTTON_GAP, -BUTTON_GAP)
+    input.edit:SetPoint("RIGHT", input, "RIGHT", -PADDING, 0)
+    input.edit:SetScript("OnEnterPressed", SubmitNameInput)
+    input.edit:SetScript("OnEscapePressed", CloseNameInput)
+    input.add = InputButton(input, "Add", SubmitNameInput)
+    input.cancel = InputButton(input, "Cancel", CloseNameInput)
+    input.cancel:SetSize(70, INPUT_ROW)
+    input.cancel:SetPoint("BOTTOMRIGHT", input, "BOTTOMRIGHT", -PADDING, PADDING)
+    input.add:SetSize(70, INPUT_ROW)
+    input.add:SetPoint("RIGHT", input.cancel, "LEFT", -BUTTON_GAP, 0)
+    input:RegisterEvent("PLAYER_REGEN_DISABLED")
+    input:SetScript("OnEvent", CloseNameInput)
+    input:Hide()
+    box.input = input
 end
 
 function DQT.UpdateBox()
@@ -744,8 +852,15 @@ function DQT.CreateBox()
     -- Dragging the header or a footer icon moves the box too (Ctrl-drag while
     -- locked); a press that became a drag is not a click.
     DragSafe(header, function() ToggleSection("quest") end)
+    CreateNameInput()
+    DQT.ApplyBoxStyle()
     DragSafe(footer.add, function()
-        if IsShiftKeyDown() then
+        local exact = IsShiftKeyDown()
+        -- No target: type a name instead (out of combat only).
+        if not UnitExists("target") and OpenNameInput(exact) then
+            return
+        end
+        if exact then
             DQT.AddExact()
         else
             DQT.AddSimilar()

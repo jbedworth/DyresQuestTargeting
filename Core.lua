@@ -124,17 +124,83 @@ end
 -- Functions other runtime files must define. A mixed install of old and new
 -- files otherwise fails silently, because the client hides Lua errors by default.
 local REQUIRED_NAMESPACE = {"ParseCommand", "HandleCommand", "FocusedQuest", "GameFocusChanged", "WorldLoading",
-    "WorldEntered", "HookQuestieFocus", "SyncFocus", "PointTomTom",
+    "WorldEntered", "HookQuestieFocus", "QuestieFocusAvailable", "SyncFocus", "PointTomTom",
     "ReportQuestDebug", "BuildMacro",
     "WriteMacro", "FlushMacro", "ReportMacroDebug", "CreateBox", "UpdateBox", "InitializeOptions", "OpenSettings"}
--- Client APIs the macro needs; checked, never the client version.
+-- Client APIs the macro needs; checked, never the client version. An entry
+-- with several APIs needs any one of them (Classic Era and Anniversary have
+-- the older quest log functions instead of C_QuestLog's).
 local REQUIRED_APIS = {
-    {"C_SuperTrack", "GetSuperTrackedQuestID"}, {"C_QuestLog", "GetQuestObjectives"},
-    {"C_QuestLog", "GetLogIndexForQuestID"}, {"C_QuestLog", "IsComplete"}, {"C_QuestLog", "GetTitleForQuestID"},
-    {nil, "GetMacroInfo"}, {nil, "GetMacroBody"}, {nil, "GetNumMacros"}, {nil, "CreateMacro"},
-    {nil, "EditMacro"}, {nil, "InCombatLockdown"}, {nil, "UnitExists"}, {nil, "UnitName"},
-    {"C_Timer", "After"},
+    {{"C_QuestLog", "GetQuestObjectives"}},
+    {{"C_QuestLog", "GetLogIndexForQuestID"}, {nil, "GetQuestLogIndexByID"}},
+    {{"C_QuestLog", "GetTitleForQuestID"}, {nil, "GetQuestLogTitle"}},
+    {{"C_QuestLog", "IsComplete"}, {nil, "GetQuestLogTitle"}},
+    {{nil, "GetMacroInfo"}}, {{nil, "GetMacroBody"}}, {{nil, "GetNumMacros"}}, {{nil, "CreateMacro"}},
+    {{nil, "EditMacro"}}, {{nil, "InCombatLockdown"}}, {{nil, "UnitExists"}}, {{nil, "UnitName"}},
+    {{"C_Timer", "After"}},
 }
+-- Without any quest focus (Classic without Questie), DQT still keeps your hit
+-- list in the macro (author); only quest targeting is off.
+local NO_FOCUS = "This client has no quest focus of its own, and Questie is not loaded, so quest targeting is "
+    .. "off; the macro keeps your hit list. Install Questie from CurseForge to target your quests."
+
+-- owner nil: a global function. Never "owner and _G[owner] or _G": with the
+-- namespace missing, that looks up a global of the same name instead (Classic
+-- Era has GetSuperTrackedQuestID as a global but no C_SuperTrack).
+local function API(owner, name)
+    local scope = _G
+    if owner then
+        scope = _G[owner]
+    end
+    return type(scope) == "table" and type(scope[name]) == "function"
+end
+
+-- The game's own quest focus (super-tracking): Forever has it; Classic Era
+-- and Anniversary do not, so DQT follows Questie's tracker focus there.
+function DQT.HasGameFocus()
+    return API("C_SuperTrack", "GetSuperTrackedQuestID")
+end
+
+-- A quest focus to follow: the game's, or Questie's tracker focus.
+function DQT.CanFollowQuests()
+    return DQT.HasGameFocus() or DQT.QuestieFocusAvailable()
+end
+
+-- The quest log, through C_QuestLog where the client has it, else the older
+-- functions (GetQuestLogIndexByID gives 0 for a quest not in the log; the
+-- sixth return of GetQuestLogTitle is 1 for a complete quest).
+function DQT.QuestLogIndex(questID)
+    if API("C_QuestLog", "GetLogIndexForQuestID") then
+        return C_QuestLog.GetLogIndexForQuestID(questID)
+    end
+    local index = GetQuestLogIndexByID(questID)
+    if type(index) == "number" and index > 0 then
+        return index
+    end
+end
+
+function DQT.QuestTitle(questID)
+    if API("C_QuestLog", "GetTitleForQuestID") then
+        return C_QuestLog.GetTitleForQuestID(questID)
+    end
+    local index = DQT.QuestLogIndex(questID)
+    local title = index and GetQuestLogTitle(index)
+    if type(title) == "string" then
+        return title
+    end
+end
+
+function DQT.QuestComplete(questID)
+    if API("C_QuestLog", "IsComplete") then
+        return C_QuestLog.IsComplete(questID) == true
+    end
+    local index = DQT.QuestLogIndex(questID)
+    if not index then
+        return false
+    end
+    local complete = select(6, GetQuestLogTitle(index))
+    return complete == 1 or complete == true
+end
 
 local function CheckInstalledFiles()
     for _, name in ipairs(REQUIRED_NAMESPACE) do
@@ -143,10 +209,14 @@ local function CheckInstalledFiles()
                 .. "). Reinstall every Dyre's Quest Targeting file, then restart the client."
         end
     end
-    for _, api in ipairs(REQUIRED_APIS) do
-        local owner = api[1] and _G[api[1]] or _G
-        if type(owner) ~= "table" or type(owner[api[2]]) ~= "function" then
-            local name = api[1] and (api[1] .. "." .. api[2]) or api[2]
+    for _, choices in ipairs(REQUIRED_APIS) do
+        local found = false
+        for _, api in ipairs(choices) do
+            found = found or API(api[1], api[2])
+        end
+        if not found then
+            local first = choices[1]
+            local name = first[1] and (first[1] .. "." .. first[2]) or first[2]
             return false, "This client lacks " .. name .. ", which the quest macro needs. DQT stays off."
         end
     end
@@ -537,7 +607,8 @@ function DQT.ListTargets()
             and (", objective " .. quest.objective) or "") .. ")" or ""
         DQT.Report("Focused quest: " .. quest.title .. where .. (quest.complete and " (ready to turn in)" or ""))
     else
-        DQT.Report("No focused quest. Focus one in the quest log, on the map, or in Questie's tracker.")
+        DQT.Report(DQT.CanFollowQuests() and "No focused quest. Focus one in the quest log, on the map, or in "
+            .. "Questie's tracker." or "No quest focus on this client without Questie: the macro uses your hit list.")
     end
     if #current.kept == 0 then
         DQT.Report("The macro targets nothing yet. /dqt add <name> adds a mob.")
@@ -592,8 +663,11 @@ end
 -- The focused quest changing, its progress, and quests leaving the log.
 -- QUEST_LOG_UPDATE carries objective progress (Blizzard's tracker uses it);
 -- QUEST_WATCH_UPDATE and UNIT_QUEST_LOG_CHANGED back it up.
-local QUEST_EVENTS = {"SUPER_TRACKING_CHANGED", "QUEST_LOG_UPDATE", "QUEST_WATCH_UPDATE", "QUEST_ACCEPTED",
-    "QUEST_REMOVED", "QUEST_TURNED_IN"}
+-- SUPER_TRACKING_CHANGED only where the game has its focus: registering an
+-- event the client does not know is an error.
+local QUEST_EVENTS = {"QUEST_LOG_UPDATE", "QUEST_WATCH_UPDATE", "QUEST_ACCEPTED", "QUEST_REMOVED",
+    "QUEST_TURNED_IN"}
+local FOCUS_EVENT = "SUPER_TRACKING_CHANGED"
 
 local events = CreateFrame("Frame")
 events:RegisterEvent("ADDON_LOADED")
@@ -617,7 +691,7 @@ events:SetScript("OnEvent", function(self, event, firstArg)
         DQT.WorldLoading()
     end
     if event ~= "PLAYER_LOGIN" then
-        if event == "SUPER_TRACKING_CHANGED" then
+        if event == FOCUS_EVENT then
             DQT.GameFocusChanged()
         end
         DQT.RequestRefresh()
@@ -645,8 +719,14 @@ events:SetScript("OnEvent", function(self, event, firstArg)
     DQT.CreateBox()
     DQT.InitializeOptions()
     JoinToolkit()
+    if not DQT.CanFollowQuests() then
+        DQT.Report(NO_FOCUS)
+    end
     for _, name in ipairs(QUEST_EVENTS) do
         self:RegisterEvent(name)
+    end
+    if DQT.HasGameFocus() then
+        self:RegisterEvent(FOCUS_EVENT)
     end
     self:RegisterUnitEvent("UNIT_QUEST_LOG_CHANGED", "player")
     self:RegisterEvent("PLAYER_REGEN_ENABLED")

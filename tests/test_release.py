@@ -245,7 +245,7 @@ class ReleaseTests(unittest.TestCase):
         notes = (self.output / "release-notes.md").read_text(encoding="utf-8")
         self.assertTrue(notes.startswith(
             f"# Dyre's Quest Targeting {self.version}\n\n## Changes\n\n"
-            "- Fixed the thing.\n- Added the other.\n\n## Notes\n\n- For WoW: Forever."))
+            "- Fixed the thing.\n- Added the other.\n\n## Notes\n\n- For WoW: Forever and WoW Classic Era 1.15.9"))
         self.assertNotIn("Older entry", notes)
 
     def test_build_refuses_missing_empty_or_duplicate_changelog_section(self):

@@ -24,6 +24,9 @@ import build_release
 VERSIONS_URL = "https://wow.curseforge.com/api/game/wow/versions"
 UPLOAD_URL = "https://wow.curseforge.com/api/projects/{project_id}/upload-file"
 FOREVER_TYPE_ID = 88568
+# CurseForge's WoW Classic Era version type (curseforge_versions.py --classic:
+# 1.15.0-1.15.9 are type 67408).
+CLASSIC_TYPE_ID = 67408
 TIMEOUT = 30
 MAX_RESPONSE_BYTES = 2 * 1024 * 1024
 RECEIPT_NAME = "curseforge-upload.json"
@@ -117,8 +120,10 @@ def load_artifact(artifact_dir, tag):
         if type(supplied) is not type(value) or supplied != value:
             raise PublishError(f"Release manifest {key} mismatch")
     if (verified["interface"] != 16001 or verified["game_version"] != "1.60.1"
-            or verified["target_build"] != 70450):
-        raise PublishError("Only Forever beta 1.60.1 / Interface 16001 / build 70450 is supported")
+            or verified["target_build"] != 70450 or verified["classic_interface"] != 11509
+            or verified["classic_game_version"] != "1.15.9" or verified["classic_target_build"] != 70003):
+        raise PublishError("Only Forever beta 1.60.1 / Interface 16001 / build 70450 with "
+                           "Classic Era 1.15.9 / Interface 11509 / build 70003 is supported")
     # Upload the held bytes, not a later read of a possibly replaced artifact.
     digest = hashlib.sha256(archive_bytes).hexdigest()
     if digest != verified["sha256"]:
@@ -178,18 +183,19 @@ def request_json(opener, request):
     return decode_json(data, "CurseForge response")
 
 
-def verify_server_version(versions, game_version_id):
+def verify_server_version(versions, game_version_id, name="1.60.1", type_id=FOREVER_TYPE_ID,
+                          label="Forever"):
     if not isinstance(versions, list):
         raise PublishError("CurseForge versions response must be an array")
     matches = [entry for entry in versions if isinstance(entry, dict)
                and type(entry.get("id")) is int and entry["id"] == game_version_id]
     if len(matches) != 1:
-        raise PublishError("Requested game-version ID is absent or ambiguous on CurseForge")
+        raise PublishError(f"Requested {label} game-version ID is absent or ambiguous on CurseForge")
     entry = matches[0]
-    if (entry.get("name") != "1.60.1"
+    if (entry.get("name") != name
             or type(entry.get("gameVersionTypeID")) is not int
-            or entry["gameVersionTypeID"] != FOREVER_TYPE_ID):
-        raise PublishError("Requested game-version ID is not Forever 1.60.1 (type 88568)")
+            or entry["gameVersionTypeID"] != type_id):
+        raise PublishError(f"Requested game-version ID is not {label} {name} (type {type_id})")
 
 
 def multipart(metadata, archive_name, archive_bytes):
@@ -208,9 +214,10 @@ def multipart(metadata, archive_name, archive_bytes):
     return body, "multipart/form-data; boundary=" + boundary
 
 
-def publish(artifact_dir, project_id, game_version_id, tag):
+def publish(artifact_dir, project_id, game_version_id, classic_game_version_id, tag):
     project_id = numeric_id(project_id)
     game_version_id = numeric_id(game_version_id)
+    classic_game_version_id = numeric_id(classic_game_version_id)
     artifact_dir = Path(artifact_dir)
     manifest, archive_bytes, changelog = load_artifact(artifact_dir, tag)
     expected_receipt = {"project_id": project_id, "tag": tag,
@@ -226,7 +233,8 @@ def publish(artifact_dir, project_id, game_version_id, tag):
     headers = {"X-Api-Token": token, "Accept": "application/json"}
     versions = request_json(opener, urllib.request.Request(VERSIONS_URL, headers=headers))
     verify_server_version(versions, game_version_id)
-    metadata = {"gameVersions": [game_version_id], "releaseType": manifest["channel"],
+    verify_server_version(versions, classic_game_version_id, "1.15.9", CLASSIC_TYPE_ID, "Classic Era")
+    metadata = {"gameVersions": [game_version_id, classic_game_version_id], "releaseType": manifest["channel"],
                 "changelog": changelog, "changelogType": "markdown", "relations": RELATIONS}
     body, content_type = multipart(metadata, manifest["archive_name"], archive_bytes)
     upload_headers = dict(headers, **{"Content-Type": content_type})
@@ -254,10 +262,12 @@ def main(argv=None):
     parser.add_argument("--artifact-dir", required=True, type=Path)
     parser.add_argument("--project-id", required=True)
     parser.add_argument("--game-version-id", required=True)
+    parser.add_argument("--classic-game-version-id", required=True)
     parser.add_argument("--tag", required=True)
     args = parser.parse_args(argv)
     try:
-        receipt = publish(args.artifact_dir, args.project_id, args.game_version_id, args.tag)
+        receipt = publish(args.artifact_dir, args.project_id, args.game_version_id,
+                          args.classic_game_version_id, args.tag)
     except (PublishError, OSError, ValueError) as error:
         # Only PublishError messages are safe to show; other exception strings
         # may include server content or credentials.

@@ -64,7 +64,7 @@ Dyre's Quest Targeting makes it easy to see what quest you are focused on, and b
 - The macro never changes in combat: anything that changes then is written when combat ends.
 
 ### Quest Target Box
-A small box shows your focused quest, what the macro looks for (with drop rates), the names left out of the macro, and your hit list. Add your target with the plus (Shift-click for the exact name), remove a name with its red X, and drag names to change their order; this works in combat too. Click a title to fold that part, or the button at the header's right to fold or open everything. Ctrl-drag the header to move it, or use `/dqt unlock`. The settings have its Style (Brown and gold, or Black and gold), Width, Max height, Text size, and Opacity, and "Start the quest targets folded" and "Start the hit list folded" for how it starts. "Show the Quest Target Box" turns it off.
+A small box shows your focused quest, what the macro looks for (with drop rates), the names left out of the macro, and your hit list. Add your target with the plus (Shift-click for the exact name; with no target, type a name), remove a name with its red X, and drag names to change their order; this works in combat too. Click a title to fold that part, or the button at the header's right to fold or open everything. Ctrl-drag the header to move it, or use `/dqt unlock`. The settings have its Style (Brown and gold, or Black and gold), Width, Max height, Text size, and Opacity, and "Start the quest targets folded" and "Start the hit list folded" for how it starts. "Show the Quest Target Box" turns it off.
 
 ### Per character
 Each character has its own macro and its own hit list. Short of character macro slots? A setting uses one account-wide macro instead.

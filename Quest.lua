@@ -244,10 +244,14 @@ local syncedID
 
 local function InLog(questID)
     return not DQT.IsSecret(questID) and type(questID) == "number" and questID > 0
-        and C_QuestLog.GetLogIndexForQuestID(questID) ~= nil
+        and DQT.QuestLogIndex(questID) ~= nil
 end
 
+-- The game's focus; none on a client without super-tracking.
 local function GameFocus()
+    if not DQT.HasGameFocus() then
+        return nil
+    end
     local questID = C_SuperTrack.GetSuperTrackedQuestID()
     if InLog(questID) then
         return questID
@@ -255,8 +259,10 @@ local function GameFocus()
 end
 
 -- Questie's focus: the quest ID and, for an objective focus, its index.
+-- Without the game's focus, it is the only one, so "Follow Questie's tracker
+-- focus" cannot turn it off.
 local function QuestieFocus()
-    if not DQT.db.questieFocus then
+    if not DQT.db.questieFocus and DQT.HasGameFocus() then
         return nil
     end
     local questie = _G.Questie
@@ -296,6 +302,17 @@ function DQT.WorldEntered()
         loading = false
         lastGameID = GameFocus()
     end)
+end
+
+-- Questie's tracker focus can be followed: Questie and its TrackerUtils
+-- focus functions are loaded.
+function DQT.QuestieFocusAvailable()
+    local loader = _G.QuestieLoader
+    if type(loader) ~= "table" or type(loader.ImportModule) ~= "function" or type(_G.Questie) ~= "table" then
+        return false
+    end
+    local utils = loader:ImportModule("TrackerUtils")
+    return type(utils) == "table" and type(utils.FocusQuest) == "function"
 end
 
 -- Hooks Questie's focus changes, once Questie has loaded. Returns true when hooked.
@@ -342,8 +359,8 @@ function DQT.FocusedQuest()
         id = questID,
         via = via,
         objective = objectiveIndex,
-        title = C_QuestLog.GetTitleForQuestID(questID) or ("quest " .. questID),
-        complete = C_QuestLog.IsComplete(questID) == true,
+        title = DQT.QuestTitle(questID) or ("quest " .. questID),
+        complete = DQT.QuestComplete(questID),
         database = db ~= nil,
         targets = {},
     }
@@ -392,7 +409,7 @@ function DQT.SyncFocus()
     syncFrom = nil
     local questieID = QuestieFocus()
     local gameID = GameFocus()
-    if from and DQT.db.syncFocus and DQT.db.questieFocus then
+    if from and DQT.db.syncFocus and DQT.db.questieFocus and DQT.HasGameFocus() then
         local utils = QuestieModule("TrackerUtils")
         if not utils or type(C_SuperTrack.SetSuperTrackedQuestID) ~= "function" then
             return
@@ -530,17 +547,18 @@ function DQT.ReportQuestDebug()
     local db, reason = Database()
     DQT.Report("debug QuestieDB: " .. (db and "loaded" or reason))
     local questieID, questieObjective = QuestieFocus()
-    DQT.Report("debug game focus=" .. DQT.Describe(C_SuperTrack.GetSuperTrackedQuestID()) .. " Questie focus="
+    local gameFocus = DQT.HasGameFocus() and DQT.Describe(C_SuperTrack.GetSuperTrackedQuestID()) or "none on this client"
+    DQT.Report("debug game focus=" .. gameFocus .. " Questie focus="
         .. tostring(questieID) .. (questieObjective and (" objective " .. questieObjective) or "")
         .. " latest=" .. focusSource .. " followQuestie=" .. tostring(DQT.db.questieFocus))
     local questID = ChooseFocus()
     if not questID then
         return
     end
-    local logIndex = C_QuestLog.GetLogIndexForQuestID(questID)
-    local complete = C_QuestLog.IsComplete(questID)
+    local logIndex = DQT.QuestLogIndex(questID)
+    local complete = DQT.QuestComplete(questID)
     DQT.Report("debug logIndex=" .. DQT.Describe(logIndex) .. " complete=" .. DQT.Describe(complete)
-        .. " title=" .. DQT.Describe(C_QuestLog.GetTitleForQuestID(questID)))
+        .. " title=" .. DQT.Describe(DQT.QuestTitle(questID)))
     local objectives = C_QuestLog.GetQuestObjectives(questID)
     for index, objective in ipairs(type(objectives) == "table" and objectives or {}) do
         DQT.Report(string.format("debug objective %d type=%s finished=%s %s/%s text=%s", index,

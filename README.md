@@ -107,8 +107,8 @@ change its priority (the top one is the most wanted). The targets stay in
 their own order, best drop rate first. The "Hit list" bar is the hit
 list's title: its names show under it. It always shows, also when the box
 is folded: the plus on the left adds your
-target
-(Shift-click for the exact name), the red X on the right clears the hit
+target (Shift-click for the exact name; with no target, a small box opens to
+type a mob's name), the red X on the right clears the hit
 list, and the middle shows how many names it has. They
 work in combat too:
 the box changes at once and the macro updates when combat ends. Click a title
@@ -117,8 +117,9 @@ or "Hit list" in its bar. The plus or minus at the header's right end folds
 or opens everything. Two settings decide how the box starts at login:
 "Start the quest targets folded" (off by default) and "Start the hit list
 folded" (on by default). The box lets clicks through to the
-world, except on its icons, header, section titles, and hit list names. It hides when
-there is nothing to show.
+world, except on its icons, header, section titles, and hit list names. With no
+focused quest it still shows, with a line on how to focus one, so you can
+always change your hit list from it.
 
 Ctrl-drag the header to move the box without unlocking (out of combat;
 it drops where you let go, with no snapping). Or move it with
@@ -188,6 +189,11 @@ once the AddOn is installed and on.
 Built for World of Warcraft: Forever 1.60.1 (build 70450, Interface 16001)
 and played on that build. DQT checks the APIs it needs at login and stays off, saying why,
 if one is missing. TESTING.md lists the in-client checks.
+
+On WoW Classic Era and Anniversary (tick "Load out of date AddOns" for now),
+the game has no quest focus, so DQT follows Questie's tracker focus there.
+Without Questie, quest targeting is off, but the macro and the box still keep
+your hit list, and chat says so at login.
 
 ## Support
 

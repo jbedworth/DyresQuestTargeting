@@ -127,6 +127,38 @@ local function fixture(options)
     if options.missingObjectives then
         env.C_QuestLog.GetQuestObjectives = nil
     end
+    -- Classic Era and Anniversary: no C_SuperTrack, and the older quest log
+    -- functions (an index from 1, 0 for a quest not in the log; the sixth
+    -- return of GetQuestLogTitle is 1 for a complete quest).
+    if options.classic then
+        env.C_SuperTrack = nil
+        -- Found in client: Classic Era has a global of this name, which must
+        -- not pass for C_SuperTrack's function.
+        env.GetSuperTrackedQuestID = function() return nil end
+        -- As in client: registering an event the client does not know fails.
+        state.unknownEvents = {SUPER_TRACKING_CHANGED = true}
+        env.C_QuestLog.GetLogIndexForQuestID = nil
+        env.C_QuestLog.IsComplete = nil
+        env.C_QuestLog.GetTitleForQuestID = nil
+        local function ordered()
+            local ids = {}
+            for id in pairs(state.quests) do ids[#ids + 1] = id end
+            table.sort(ids)
+            return ids
+        end
+        env.GetQuestLogIndexByID = function(id)
+            for index, each in ipairs(ordered()) do
+                if each == id then return index end
+            end
+            return 0
+        end
+        env.GetQuestLogTitle = function(index)
+            local id = ordered()[index]
+            local quest = id and state.quests[id]
+            if not quest then return nil end
+            return quest.title, 10, 0, false, false, quest.complete and 1 or nil, 0, id
+        end
+    end
     if options.db then
         env.LibQuestieDB = questieDB(options.db, options.dbContract)
     end
@@ -351,6 +383,9 @@ local function fixture(options)
             if event == "COMBAT_LOG_EVENT_UNFILTERED" then
                 error("COMBAT_LOG_EVENT_UNFILTERED is restricted")
             end
+            if state.unknownEvents and state.unknownEvents[event] then
+                error('Attempt to register unknown event "' .. event .. '"')
+            end
             self.events[event] = true
         end
         function frame:UnregisterEvent(event) self.events[event] = nil end
@@ -412,6 +447,8 @@ local function fixture(options)
         function frame:SetColorTexture(...) self.color = {...} end
         function frame:SetMouseClickEnabled(value) self.mouseClicks = value == true end
         function frame:SetDesaturated(value) self.desaturated = value == true end
+        function frame:SetFocus() self.focused = true end
+        function frame:ClearFocus() self.focused = false end
         function frame:SetFrameLevel(level) self.level = level end
         function frame:GetFrameLevel()
             if self.level then return self.level end
@@ -531,7 +568,7 @@ local CONDOR_QUEST = {[101] = {title = "The Condor Hunt", objectives = {
 
 test("logs in with a banner and makes the character macro", function()
     local state = fixture()
-    contains(state.messages[1], "DQT: Dyre's Quest Targeting 1.1.1 by Dyre")
+    contains(state.messages[1], "DQT: Dyre's Quest Targeting 1.2.0 by Dyre")
     equal(state.said("Ready."), true)
     equal(state.dqt.available, true)
     contains(state.macro(), "nothing to target")
@@ -818,6 +855,87 @@ test("Questie and TomTom settings are greyed out without their AddOns; saved val
     none.env.QuestieLoader = {ImportModule = function() return {} end}
     none.env.TomTom = {}
     equal(settingRow(none, "DQT_TOMTOM"):Enabled(), true, "loaded after the page was built")
+end)
+
+test("classic: without the game's focus, DQT follows Questie's; the focus settings are greyed", function()
+    local state = fixture({classic = true, quests = TWO_QUESTS, questie = {focus = 2},
+        saved = {questieFocus = false, syncFocus = true}})
+    equal(state.dqt.available, true, "Questie's focus is enough to start")
+    contains(state.macro(), "/targetexact Wolf", "follows Questie's focus, also with its switch saved off")
+    equal(state.said("lacks"), false)
+    state.questieUtils:FocusQuest(1)
+    state.advance()
+    contains(state.macro(), "/targetexact Boar")
+    lacks(state.macro(), "Wolf")
+    local follow, sync = settingRow(state, "DQT_QUESTIE_FOCUS"), settingRow(state, "DQT_SYNC_FOCUS")
+    equal(follow:Enabled(), false, "greyed: it cannot be turned off")
+    equal(follow.setting:GetValue(), true, "shown on")
+    contains(follow.tooltip, "no quest focus of its own, so DQT always follows Questie's")
+    equal(sync:Enabled(), false, "nothing to sync")
+    contains(sync.tooltip, "nothing to sync")
+    equal(state.focusSets, nil, "the sync never touches a game focus")
+    for _, frame in ipairs(state.frames) do
+        equal(frame.events.SUPER_TRACKING_CHANGED, nil, "an event this client does not know is not registered")
+    end
+    state.slash("debug")
+    equal(state.said("game focus=none on this client"), true)
+end)
+
+test("classic: titles and completion come from the older quest log", function()
+    local quests = {[101] = {title = "Silk", complete = true, objectives = {objective("Dire Condor slain: 8/8",
+        "monster", true)}}}
+    local db = {quests = {[101] = {finishedBy = {{30}}}}, npcs = {[30] = "Guard Parker"}, items = {}}
+    local state = fixture({classic = true, db = db, quests = quests, questie = {focus = 101}})
+    contains(state.macro(), "/targetexact Guard Parker", "complete: the turn-in NPC, from QuestieDB")
+    state.slash("list")
+    equal(state.said("Focused quest: Silk (Questie's focus) (ready to turn in)"), true)
+end)
+
+test("classic: without any quest focus, DQT keeps the hit list in the macro; quest targeting is off", function()
+    local state = fixture({classic = true, quests = TWO_QUESTS})
+    equal(state.dqt.available, true, "not disabled: the hit list still works")
+    equal(state.said("Ready."), true)
+    equal(state.said("This client has no quest focus of its own, and Questie is not loaded, so quest targeting is "
+        .. "off; the macro keeps your hit list. Install Questie from CurseForge to target your quests."), true)
+    contains(state.macro(), "nothing to target", "no quest names")
+    state.target = "Goretusk"
+    state.slash("add")
+    contains(state.macro(), "/tar Goretusk", "the hit list goes into the macro")
+    equal(state.dqt.box.shown, true, "the box shows the hit list")
+    local header
+    for _, child in ipairs(state.dqt.box.children) do
+        if child.kind == "Button" and child.rate and child.full then header = header or child end
+    end
+    equal(header.full, "No quest focus: install Questie")
+    state.clear()
+    state.slash("list")
+    equal(state.said("No quest focus on this client without Questie: the macro uses your hit list."), true)
+end)
+
+test("classic: a fresh character with no focus and no hit list gets the macro at login", function()
+    for _, options in ipairs({{classic = true, questie = {}}, {classic = true}}) do
+        options.quests, options.realDefaults = TWO_QUESTS, true
+        local state = fixture(options)
+        equal(#state.character, 1, "the character macro is made at login")
+        equal(state.character[1].name, "! Target (DQT)")
+        equal(state.character[1].icon, 132177, "Hunter Marksman, by file ID as Era's Macro window passes it")
+        equal(state.character[1].body, "// Dyre's Quest Targeting: nothing to target. /dqt add <name> adds one.")
+        equal(#state.account, 0)
+        equal(state.said("Made the character macro"), true)
+    end
+end)
+
+test("forever: the game's focus and Questie's together, unchanged", function()
+    local state = fixture({quests = TWO_QUESTS, focus = 1, questie = {}})
+    equal(state.dqt.available, true)
+    equal(settingRow(state, "DQT_QUESTIE_FOCUS"):Enabled(), true)
+    equal(settingRow(state, "DQT_SYNC_FOCUS"):Enabled(), true)
+    contains(settingRow(state, "DQT_QUESTIE_FOCUS").tooltip, "Needs Questie:")
+    local registered = false
+    for _, frame in ipairs(state.frames) do
+        registered = registered or frame.events.SUPER_TRACKING_CHANGED == true
+    end
+    equal(registered, true)
 end)
 
 local SPAWNS = {[2] = {[2] = {spawn = {40, 60}, zone = 12, name = "Bear"}}}
@@ -1232,6 +1350,43 @@ local function spellbookGlobals(noSpellInfo)
     }
 end
 
+-- Classic Era and Anniversary's spellbook: the older tab API only.
+local function oldSpellbookGlobals()
+    local globals = spellbookGlobals()
+    globals.C_SpellBook = nil
+    local function item(slot)
+        for _, line in ipairs(SPELLBOOK) do
+            local entry = line.items[slot - line.offset]
+            if entry then return entry end
+        end
+    end
+    globals.GetNumSpellTabs = function() return #SPELLBOOK end
+    globals.GetSpellTabInfo = function(tab)
+        local line = SPELLBOOK[tab]
+        return line.name, nil, line.offset, #line.items
+    end
+    globals.GetSpellBookItemName = function(slot, book)
+        equal(book, "spell", "the player's spellbook")
+        local entry = item(slot)
+        return entry.name, entry.subName
+    end
+    globals.IsPassiveSpell = function(slot) return item(slot).isPassive == true end
+    return globals
+end
+
+test("classic: the opener lists the spellbook through the older tab API", function()
+    local state = fixture({quests = CONDOR_QUEST, focus = 101, globals = oldSpellbookGlobals()})
+    local labels = {}
+    for _, object in ipairs(state.registered.initializers) do
+        if object.setting and object.setting.variable == "DQT_OPENER" then
+            for _, choice in ipairs(object.options()) do labels[#labels + 1] = choice.label end
+        end
+    end
+    equal(table.concat(labels, ","), "Nothing,Start attacking (/startattack),Attack,Auto Shot,"
+        .. "Entangling Roots(Rank 1),Moonfire(Rank 1),Moonfire(Rank 2),Moonfire(Rank 3)",
+        "each rank, harmful spells of 1 second or less, no passives")
+end)
+
 test("the opener lists every spellbook spell and rank, and casts the one picked", function()
     local state = fixture({quests = CONDOR_QUEST, focus = 101, globals = spellbookGlobals()})
     local opener = state.registered.initializers[6]
@@ -1612,12 +1767,41 @@ test("box: a Questie objective focus, a complete quest, and no focus", function(
     equal(lines[1], "Silk (Focus) · ready to turn in")
     equal(lines[3], "Guard Parker turn-in | -")
     local none = fixture()
-    equal(none.dqt.box.shown, false, "nothing to show: hidden")
-    none.toolkit.Unlock()
-    equal(none.dqt.box.shown, true, "unlocked: shown, to move it")
-    equal(boxLines(none)[1], "No focused quest")
-    none.toolkit.Lock()
-    equal(none.dqt.box.shown, false)
+    equal(none.dqt.box.shown, true, "no focused quest: shown, for the hit list")
+    lines = boxLines(none)
+    equal(lines[1], "No focused quest")
+    equal(lines[2], "Focus a quest in the quest log or on the map.", "how to focus one")
+end)
+
+test("box: with no focused quest it shows a hint, and the hit list stays usable", function()
+    local forever = fixture({quests = TWO_QUESTS, questie = {}})
+    equal(boxLines(forever)[2], "Focus a quest in the quest log, on the map, or in Questie's tracker.")
+    local classic = fixture({classic = true, quests = TWO_QUESTS, questie = {}})
+    equal(classic.dqt.box.shown, true)
+    equal(boxLines(classic)[1], "No focused quest")
+    equal(boxLines(classic)[2], "Focus a quest in Questie's tracker (right-click a quest).")
+    -- The hit list starts folded on John's characters: it can still be reached.
+    local state = fixture({classic = true, quests = TWO_QUESTS, questie = {}, realDefaults = true})
+    equal(state.env.DyresQuestTargetingDB.startHitListFolded, true)
+    equal(state.dqt.box.shown, true)
+    state.target = "Goretusk"
+    addTarget(state)
+    contains(state.macro(), "/tar Goretusk", "the macro targets the hit list with no quest")
+    equal(footerCount(state), "Hit list: 1 (hidden)", "folded, but there")
+    footerTitle(state):Click()
+    equal(type(boxRow(state, "Goretusk")), "table", "opened, it shows the name")
+    removeButton(state, "Goretusk"):Click()
+    lacks(state.macro(), "Goretusk")
+    equal(state.dqt.box.shown, true, "an empty hit list and no quest: still shown")
+    -- A focus that comes later fills the quest's part and drops the hint.
+    state.questieUtils:FocusQuest(2)
+    state.advance()
+    local lines = boxLines(state)
+    equal(lines[1], "Wolves (Questie)")
+    equal(lines[2], "Targets, most wanted first (2)", "the hint is gone")
+    -- DQT off: only while frames are unlocked, as before.
+    state.slash("off")
+    equal(state.dqt.box.shown, false)
 end)
 
 test("box: names left out of the macro are listed apart", function()
@@ -1662,12 +1846,92 @@ test("box: the hit list, newest first, with its kind, and the X, Clear, and Add 
     equal(footerIcon(state, "clear").icon.desaturated, true, "greyed out")
     state.target = nil
     addTarget(state)
-    equal(state.last(), "DQT: Target a mob or type a name.")
+    equal(state.dqt.box.input.shown, true, "no target: the name input opens instead")
+    state.dqt.box.input.edit.scripts.OnEscapePressed(state.dqt.box.input.edit)
     state.target = secret()
     state.secrets[state.target] = true
     addTarget(state, true)
     contains(state.last(), "cannot be read right now")
     equal(#state.env.DyresQuestTargetingDB.added, 0, "a secret name is never kept")
+end)
+
+test("box: the plus with no target opens a name input under the box", function()
+    local state = fixture({quests = CONDOR_QUEST, focus = 101})
+    local input = state.dqt.box.input
+    equal(input.shown, false, "closed at first")
+    equal(input.points[1][2], state.dqt.box, "anchored to the box, not the middle of the screen")
+    equal(input.edit.template, "InputBoxTemplate", "a one-line edit box")
+    -- No target: it opens with the edit box focused; Enter adds the trimmed name.
+    addTarget(state)
+    equal(input.shown, true)
+    equal(input.edit.focused, true, "typing goes straight into it")
+    equal(strip(input.prompt.text), "Mob name to add")
+    input.edit:SetText("  Defias Bandit  ")
+    input.edit.scripts.OnEnterPressed(input.edit)
+    equal(input.shown, false, "closed after adding")
+    equal(state.env.DyresQuestTargetingDB.added[1].name, "Defias Bandit", "trimmed")
+    equal(state.env.DyresQuestTargetingDB.added[1].exact, false, "a click: similar names, as /dqt add")
+    contains(state.macro(), "/tar Defias Bandit")
+    equal(state.last(), "DQT: Added Defias Bandit to your hit list (any name containing it).")
+    -- Shift-click: the exact name; the Add button works as Enter.
+    addTarget(state, true)
+    equal(strip(input.prompt.text), "Mob name to add (exact name)")
+    input.edit:SetText("Goretusk")
+    input.add:Click()
+    equal(state.env.DyresQuestTargetingDB.added[2].exact, true, "Shift-click: the exact name, as /dqt add_exact")
+    -- Escape, Cancel, and an empty name close it without adding.
+    addTarget(state)
+    input.edit:SetText("Kobold")
+    input.edit.scripts.OnEscapePressed(input.edit)
+    equal(input.shown, false)
+    addTarget(state)
+    input.edit:SetText("Kobold")
+    input.cancel:Click()
+    addTarget(state)
+    input.edit:SetText("   ")
+    input.edit.scripts.OnEnterPressed(input.edit)
+    equal(input.shown, false)
+    equal(#state.env.DyresQuestTargetingDB.added, 2, "nothing added by Escape, Cancel, or an empty name")
+    -- A name already there moves to the top; a bad name gets the usual message.
+    addTarget(state)
+    input.edit:SetText("defias bandit")
+    input.edit.scripts.OnEnterPressed(input.edit)
+    equal(#state.env.DyresQuestTargetingDB.added, 2, "no duplicate")
+    addTarget(state)
+    input.edit:SetText("Wolf; Boar")
+    input.edit.scripts.OnEnterPressed(input.edit)
+    equal(state.last(), "DQT: A name cannot contain \";\" or a line break.")
+    -- With a target, the plus adds the target as before; no input.
+    state.target = "Goretusk"
+    addTarget(state)
+    equal(input.shown, false)
+end)
+
+test("box: the name input respects the 20-name limit, never opens in combat, and combat closes it", function()
+    local saved = {added = {}}
+    for index = 1, 20 do
+        saved.added[index] = {name = "Mob " .. index, exact = false}
+    end
+    local state = fixture({quests = CONDOR_QUEST, focus = 101, saved = saved})
+    local input = state.dqt.box.input
+    addTarget(state)
+    input.edit:SetText("Newcomer")
+    input.edit.scripts.OnEnterPressed(input.edit)
+    equal(#state.env.DyresQuestTargetingDB.added, 20)
+    contains(state.last(), "Removed the oldest, Mob 1.", "the limit's usual message")
+    -- In combat: no input; the chat line as before.
+    state.combat = true
+    addTarget(state)
+    equal(input.shown, false, "no popups in combat")
+    equal(state.last(), "DQT: Target a mob or type a name.")
+    state.combat = false
+    -- Combat starting while it is open closes it.
+    addTarget(state)
+    equal(input.shown, true)
+    state.combat = true
+    state.emit("PLAYER_REGEN_DISABLED")
+    equal(input.shown, false, "closed when combat starts")
+    equal(input.edit.focused, false)
 end)
 
 test("box: in combat the buttons change the hit list at once, and the macro waits", function()
@@ -1888,7 +2152,8 @@ test("box: two footer icons, bottom right, with tooltips; they drag the box and 
     function tip:Show() self.shown = true end
     function tip:Hide() self.shown = false end
     add.scripts.OnEnter(add)
-    equal(tip.text, "Add your target to the hit list. Shift-click to match the exact name.")
+    equal(tip.text, "Add your target to the hit list. Shift-click to match the exact name. With no target, type a "
+        .. "name.")
     add.scripts.OnLeave(add)
     equal(tip.shown, false)
     clear.scripts.OnEnter(clear)

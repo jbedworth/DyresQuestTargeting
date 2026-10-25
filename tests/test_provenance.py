@@ -28,7 +28,7 @@ class ProvenanceTests(unittest.TestCase):
         source = root / "source"
         source.mkdir()
         (source / "DyresQuestTargeting.toc").write_text(
-            "## Interface: 16001\n## Version: 1.2.3-beta\n"
+            "## Interface: 16001, 11509\n## Version: 1.2.3-beta\n"
             + "\n".join(build_release.RUNTIME_FILES) + "\n",
             encoding="utf-8", newline="\n",
         )
