@@ -136,6 +136,9 @@ end
 local function SubLine()
     local quest = Quest()
     if quest then
+        if quest.stepText then
+            return quest.via .. ": " .. quest.stepText, GREY_CODE .. quest.via .. ": |r" .. quest.stepText
+        end
         if quest.objectiveText then
             return "Objective: " .. quest.objectiveText, GREY_CODE .. "Objective: |r" .. quest.objectiveText
         end
@@ -455,7 +458,7 @@ local function HeaderText()
         local text = DQT.CanFollowQuests() and "No focused quest" or "No quest focus: install Questie"
         return GREY_CODE .. text .. "|r", text
     end
-    local plain = quest.title .. " (" .. (quest.via == "Questie" and "Questie" or "Focus") .. ")"
+    local plain = quest.title .. " (" .. DQT.ViaName(quest, "Focus") .. ")"
         .. (quest.complete and " · ready to turn in" or "")
     return GOLD_CODE .. plain .. "|r", plain
 end

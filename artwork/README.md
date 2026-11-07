@@ -33,12 +33,13 @@ pages arrived as WebP and are kept as same-size PNG copies.
   (Questie)", with targets and drop rates, the names left out of the macro,
   and the hit list bar.
 - `screenshots/settings-macro-and-markers.png`: the settings
-  page, top: the macro, markers, opener, Questie Synchronization, and the
-  start of the Quest Target Box section.
+  page, top: the macro, markers, opener, and integrations. Taken before 1.3.0:
+  retake it (the old "Questie Synchronization" heading and cut-off names).
 - `screenshots/settings-quest-target-box.png`: the settings
-  page, scrolled to the Quest Target Box settings.
+  page, scrolled to the Quest Target Box settings. Taken before 1.3.0: retake
+  it (the same old heading shows above the section).
 
-Suggested later shots: the macro on an action bar with a skulled quest mob;
+Suggested later shots: the box on a Zygor step, "<quest> (Zygor)"; the macro on an action bar with a skulled quest mob;
 `/dqt list` in chat. Retake a screenshot when the feature it shows changes
 visibly.
 

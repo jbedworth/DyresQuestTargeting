@@ -31,13 +31,14 @@ TIMEOUT = 30
 MAX_RESPONSE_BYTES = 2 * 1024 * 1024
 RECEIPT_NAME = "curseforge-upload.json"
 # Questie (CurseForge project 334372) is optional: without it DQT follows the
-# game's quest focus. QuestieDB has no CurseForge project, so it is not listed.
-# Dyre's Toolkit is required on CurseForge, as for every Dyre's AddOn, so the
-# app installs it; the TOC lists it as optional, so DQT still loads without it.
+# game's quest focus. QuestieDB (project 1696795, by Lawgon) and Dyre's Toolkit
+# are required on CurseForge, so the app installs them with DQT; the TOC lists
+# both in OptionalDeps, so DQT still loads without them and says what it lacks.
 # TomTom (CurseForge project 18808) is optional: "Point TomTom at the focused
 # quest" needs it.
 RELATIONS = {"projects": [{"slug": "questie", "projectID": 334372, "type": "optionalDependency"},
                           {"slug": "tomtom", "projectID": 18808, "type": "optionalDependency"},
+                          {"slug": "questiedb", "projectID": 1696795, "type": "requiredDependency"},
                           {"slug": "dyres-toolkit", "type": "requiredDependency"}]}
 
 

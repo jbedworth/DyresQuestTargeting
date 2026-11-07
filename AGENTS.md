@@ -4,9 +4,10 @@
 
 Dyre's Quest Targeting (DQT, `/dqt`) is a World of Warcraft: Forever AddOn
 that keeps one targeting macro up to date with the quest you are working on.
-It replaces the one RestedXP (RXP) feature the author still wanted, built from
-Forever's own quest journal instead of a guide. Keep this feature set; do not
-add speculative features or frameworks without agreement.
+It began as the one RestedXP (RXP) feature the author still wanted, built from
+Forever's own quest journal instead of a guide; since 1.3.0 it can also follow
+a Zygor or RestedXP step. Keep this feature set; do not add speculative features
+or frameworks without agreement.
 
 Naming (author-approved): the title starts with "Dyre's", so players can find
 all of the author's AddOns by searching for it ("Forever" matched too much).
@@ -81,8 +82,11 @@ prefix `DQT:`. Listings say plainly that it is for WoW: Forever.
   ("Rank N"), and IsPassiveSpell. QuestieDB on Era ships QuestieDB_Vanilla.toc
   and QuestieDB_TBC.toc with contract 4 (Era's Questie uses LibQuestieDB
   too), so the same reads are used; a missing or older contract falls back to
-  kill objectives as everywhere. The TOC stays Interface 16001 for now
-  (players tick "Load out of date AddOns"); release plumbing comes later.
+  kill objectives as everywhere. The TOC lists Interfaces 16001 and 11509
+  (one package, uploaded for Forever and Classic Era); Anniversary is not
+  listed (players tick "Load out of date AddOns").
+- A guide's step is a focus too (1.3.0); see "With Zygor Guides Viewer" and
+  "With RestedXP".
 - Only the focused quest counts (author-approved): the game's (the
   super-tracked quest, `C_SuperTrack.GetSuperTrackedQuestID`,
   `SUPER_TRACKING_CHANGED`) or Questie's tracker focus (author-approved: read
@@ -157,16 +161,180 @@ prefix `DQT:`. Listings say plainly that it is for WoW: Forever.
 - `/dqt on` and `/dqt off` (and the settings page's switch): off leaves the
   macro as it is, and syncs nothing.
 
+### With Zygor Guides Viewer (built 1.3.0; author-approved, 2026-11-05)
+
+Author: "Latest focus change wins." Found in client: Zygor sets the game's
+focus (so DQT followed it), but not at load, and only for the step's first
+quest. Source verified in Zygor Guide Viewer Forever 1.6
+(`_forever_\Interface\AddOns\ZygorGuidesViewerForever`); private fields,
+not a public API. Zygor is a paid AddOn: tests mock only its fields.
+
+- "Follow Zygor's current step" (`db.zygorFocus`, default on
+  (author-approved; it only reads, as "Follow Questie's tracker focus");
+  greyed out without Zygor, by `DQT.ZygorAvailable`: the global
+  `ZygorGuidesViewer` with `AddMessageHandler`).
+- Zygor's step is a third focus. A new step (`ZygorGuidesViewer.CurrentStep`,
+  keyed by `CurrentGuide.title` and `step.num`) makes it the latest; goal
+  progress on the same step only rebuilds. Questie's hooks and a game focus
+  change make the quest focus the latest again, except a game focus on a
+  quest of Zygor's shown steps (Zygor's own `ZGV:TrackQuest`, from
+  `ZGV:FocusStep`). A step change while the world loads does not count (the
+  same loading guard as the game's focus); the step at the end of loading
+  is the one later steps compare with. At login, Zygor's step wins when it
+  names someone (author-approved; Questie's, then the game's, otherwise).
+  Only a new step counts as a Zygor change (author-approved): goal progress
+  would otherwise take the focus back from a quest just chosen in Questie.
+- Messages through `ZGV:AddMessageHandler` (handler(self, message, ...),
+  unprotected, so DQT's handler only notes the step and asks for a
+  rebuild): ZGV_STEP_CHANGED, ZGV_GOAL_COMPLETED, ZGV_GOAL_UNCOMPLETED,
+  ZGV_GOAL_PROGRESS, ZGV_GUIDE_LOADED. No polling.
+- Names: the shown steps are the sticky steps (`ZGV.CurrentStickies`, less
+  important; author-approved) and the current step; within a step, goals from last to first,
+  so the guide's first goal wins. A goal counts when `goal:GetStatus()` (or
+  `goal.status`) is "incomplete" or "passive": Zygor's passive goals include
+  "kill Timber Wolf, Young Wolf" beside "collect 8 Tough Wolf Meat"
+  (author-approved: "incomplete" only would miss the droppers). Kill
+  goals: `goal.targets` ({name, id} pairs) or `goal.target`; `goal.mobs`
+  ({name, id, pl}) on any goal but "avoid" (the "from" line and the "|from"
+  tag); `goal.npc` on talk, clicknpc, accept, and turnin goals. A plural goal
+  (`goal.plural`) has a plural name, so its name is QuestieDB's for the ID,
+  or none (author-approved). One line per name, at its most important place; all
+  `/targetexact`. Sources "kill" and "talk" ("talk to"; not said as a
+  completed objective, as a turn-in).
+- A step that names no one falls back to the quest focus. Title: the first
+  open goal's quest (`goal.questid`), else "Guide step N of <guide>"; the
+  box's line under the header is "Zygor: step N of <guide>"
+  (`CurrentGuide.title_short`), `/dqt list` says "(Zygor's step N of
+  <guide>)", and chat "Focused quest changed via Zygor (...)".
+- Every field is type-checked; with changed fields DQT falls back to the
+  quest focus. The sync does not copy it. A game focus on a quest of a guide's
+  shown steps changes nothing at all (no latest focus, no sync): the guide
+  sets it itself.
+- A guide step's location (author, 1.3.0, reversing the earlier "arrows differ
+  on purpose": "For Zygor or RXP, if sync is enabled and the active step has a
+  location, we use it. Otherwise, we fall back to current behavior. Then we
+  behave at least as good as the guide's internal arrow; and arguably better in
+  cases where the step has no location stored."). "Sync" is the guide's Follow
+  setting plus "Point TomTom at the focused quest"; no new setting. It counts
+  while the guide is the latest focus (`guideFocus`), also on a step that names no
+  one, where the macro follows the quest focus; a quest focus changed last takes
+  the arrow back. Set with `TomTom:AddWaypoint` (map ID, x and y 0 to 1), not
+  Questie's `SetTomTomTarget`: that takes an area ID, and
+  `ZoneDB:GetAreaIdByUiMapId` can raise an error. With Questie, the waypoint goes
+  in its `db.char._tom_waypoint`, so each side removes the other's and it is
+  saved as Questie's is; without Questie, DQT keeps it and asks for it not to be
+  saved (`persistent = false`), or it would stay for good after a `/reload`.
+  Without `AddWaypoint`, the path below.
+- Zygor's location: the goal `step.current_waypoint_goal_num`, else the next goal
+  with numeric `map`, `x`, `y` (0 to 1), `IsVisible()`, no `force_noway`, not
+  "mapmarker" (Step.lua:786 `CycleWaypoint`, Step.lua:833 `CycleWaypointTo`,
+  Waypoints.lua:170-181). Only the current step: Zygor's arrow does not go to a
+  sticky step. It is the goal, not `Pointer.DestinationWaypoint` (which also holds
+  manual and corpse points), and not the travel route LibRover finds to it, so on
+  a long trip Zygor's arrow can show a flight master first. Signal: the message
+  ZGV_STEP_WAYPOINT_CHANGED (Step.lua:839) and ZGV_GOAL_COMPLETED
+  (`Goal:OnCompleted` cycles). A `path` farm step with no goal location falls
+  back below.
+- "Point TomTom at the focused quest" with no location follows a Zygor step (author,
+  1.3.0, found in client: the arrow stayed on the earlier quest's NPC; Zygor sets
+  no TomTom waypoint): the nearest spawn of the step's mobs and NPCs,
+  sticky steps' too, as for a Questie focus. With no spawn data (a name not
+  in QuestieDB), `SetQuestTomTomTarget` with the step's first open quest in
+  the log (`quest.logQuest`); with none, the waypoint stays. `quest.id` is
+  DQT's own key ("zygor ...") and never reaches Questie. The first step of
+  a session is the one Zygor restores, also seconds after login, so it does
+  not point; a later step, its next waypoint, or a change in the macro's mobs
+  does. A first step chosen by hand does not point either, until the next change.
+
+### With RestedXP (built 1.3.0; author-approved, 2026-11-05)
+
+Author: "RXP's arrow sucks, if we did the same thing for RXP, the tomtom arrow
+pointing would be worthwhile, even if people use RXP's targeting macro (though
+I think ours is better)." Source verified in RXPGuides v4.11.32; private fields,
+not a public API. Tests mock only its fields, with no guide text.
+
+- "Follow RestedXP's current step" (`db.rxpFocus`, default on; greyed out
+  without it, by `DQT.RxpAvailable`: `LibStub:GetLibrary("AceAddon-3.0",
+  true):GetAddon("RXPGuides", true)` with `RXPFrame.activeSteps`). Not the
+  global `RXP` ("debug purposes") or `_G.RXPGuides` (another table).
+  `RXPTargeting`, RestedXP's own macro, is left alone.
+- Quest.lua's local `guideFocus` is "zygor",
+  "rxp", nil (a quest focus changed last), or "login". A guide step wins while
+  it is the latest and names someone. With both guides at login, Zygor's first
+  (proposed; both set the game's focus, so running both is unusual), then
+  RestedXP's; after that the latest new step.
+- A new step is a new `currentGuide.name` and current `step.index` (the last
+  active step with a number). Read at each rebuild (`NoteRxpStep`); the same
+  loading guard and "the step at the end of loading" rule as Zygor. The signal:
+  `hooksecurefunc(addon.targeting, "UpdateUnitList", ...)`, run after each
+  SetStep through RegisterGeneratedSteps, plus the quest events. Not the
+  RXP_STEP_ messages: they would need AceEvent, and the hook is enough.
+- Names: `step.elements[i].unitscan` and `.mobs` (source "kill") and `.targets`
+  (source "talk"), as its UpdateUnitList reads them, through
+  `addon.GetCreatureName` (the player's language). Not `GetCurrentTargets`: it
+  adds rare and generated lists (dangerous mobs). Active steps in order, the
+  current step last, its elements from last to first. A "+" tag's list is nil
+  once its parent is complete (UpdateTargets), so what is left is open; a tag
+  without "+" stays until its step ends. An unresolved bare ID is a number
+  string: QuestieDB's name, or none. One line per name; all `/targetexact`.
+- A step that names no one falls back to the quest focus. Header "(RestedXP)";
+  under it "RestedXP: step N of <guide>"; `/dqt list` and `/dqt debug` say so;
+  chat "Focused quest changed via RestedXP (...)". Title: the first open quest
+  (`element.questId` on accept, turnin, complete; current step first).
+- The game's focus: RestedXP sets it from `step.track` and from complete and
+  turnin tags, repeatedly. A game focus on a quest of an active step changes
+  nothing (as for Zygor), so it no longer beats Questie's focus while this
+  setting is on. With the setting off, the old "keeps taking over" limit holds.
+- RestedXP's location, as its arrow chooses (`updateArrowData`, map.lua:1023):
+  the first of `addon.activeWaypoints` not `hidden`, not `skip`, on a step with
+  `active`, whose `parent` is not completed or skipped, with `arrow` (and not
+  `text` and `completed`) or an odd `generated`; a `lowPrio` one only when no
+  other is left. So a sticky step's location wins over the current step's, as on
+  its arrow (activeSteps' order), so both arrows agree. `.goto` (functions.lua:1908):
+  radius 0 alone has no `arrow`, a map pin only; radius 0 with a fifth value
+  ("...,0,0") is `lowPrio`. `x`, `y` are 0 to 100 in the map `zone`. Signal:
+  `hooksecurefunc(addon, "UpdateMap", ...)` when its argument is true (the list
+  was rebuilt, also for a waypoint reached, on RestedXP's ticker); not its
+  `UpdateGotoSteps`, which runs on a timer. Known gaps: a `.goto` with a negative
+  radius (`dynamic`: the nearest of a set) is chosen again by distance without a
+  rebuild, so TomTom keeps the last until the next one (8 of the guide's `.goto`
+  lines); the arrow's corpse and spirit healer points are not followed. The list is
+  empty until its first rebuild after login, so the first step counts until it fills
+  (`RxpMapPending`), or that would point at login.
+- With no location, TomTom points as for Zygor; never at login. Tags give names,
+  not IDs, so each name is matched against the active steps' quests in QuestieDB
+  (objectives, their droppers, startedBy, finishedBy; English names only), kept per
+  quest. No match: `SetQuestTomTomTarget` with the step's first open quest in the
+  log; none: the waypoint stays. QuestieDB has no name-to-ID index.
+- Measured offline, one step at a time, on Forever's guide
+  (Guides/forever/Alliance-1-10_NightElf.lua, 360 steps; Guides/GuideList-forever.xml
+  loads it, not Classic-Alliance-1-10_NightElf.lua, 287 steps, which is Era's): 279
+  have a location, 21 point at a mob or NPC, 2 at the quest, 58 leave the waypoint.
+- Classic: RXPGuides_Vanilla.toc loads the same Lua files, so the fields are the
+  same (source only; RestedXP is not installed in `_classic_era_`). A guide
+  counts for `DQT.CanFollowQuests`, so RestedXP without Questie follows its step.
+
 ### With Questie installed (built; author-approved, both default off)
 
 Both are marked experimental (author): under the settings section heading
-"Questie Synchronization (Experimental)" (when the client has
-`CreateSettingsListSectionHeaderInitializer`), "(experimental)" in the
-setting names, a caution in their tooltips, README, CHANGELOG, and listing.
+"Integrations (Experimental)" (when the client has
+`CreateSettingsListSectionHeaderInitializer`), a caution in their tooltips,
+README, CHANGELOG, and listing. The names never say "(experimental)"
+(author, 1.3.0: the heading says it, and the names were cut off; Forever
+and Classic Era both have the heading). The heading's type check is only a
+safety check and changes no name.
+That heading holds every setting for another AddOn (author, 1.3.0, renamed
+from "Questie Synchronization": "I had a hard time finding the setting"),
+in this order: "Follow Questie's tracker focus", "Follow Zygor's current
+step", "Follow RestedXP's current step", "Keep Questie's and the game's focus in sync", and "Point TomTom at
+the focused quest". Above it, the macro's own settings: the switch, the
+markers, the opener, and the account-wide macro. Only the place changed:
+saved keys, defaults, greying, and dependencies stay.
 
 Without their AddOns (author, 1.1.1), "Follow Questie's tracker focus" and
 "Keep Questie's and the game's focus in sync" (Questie) and "Point TomTom at
-the focused quest" (Questie and TomTom) are greyed out, not hidden, with a
+the focused quest" (TomTom, and Questie, Zygor, or RestedXP: a step's location
+needs no Questie) are greyed out, not hidden, with a
 tooltip line that names what they need; saved values stay as they are. The
 check is an initializer modify predicate (`AddModifyPredicate`,
 Blizzard_SettingControls.lua), which the settings list runs each time it
@@ -181,15 +349,17 @@ tests the same globals the features use (`QuestieLoader`, `TomTom`).
   unfocus in Questie. The game has no objective focus: a Questie objective
   focus gives the game its quest, and a game focus on Questie's own quest
   keeps Questie's (objective) focus.
-- "Point TomTom at the focused quest" (`db.tomtom`; needs Questie and
-  TomTom): the nearest spawn of the quest mobs the macro lists
+- "Point TomTom at the focused quest" (`db.tomtom`; needs TomTom, and for a
+  quest focus Questie): the nearest spawn of the quest mobs the macro lists
   (author-approved: Questie's own target can be a dropper the macro leaves
   out), from `QuestieDB:GetNPC` spawns and `DistanceUtils.GetNearestSpawn`,
   set with `TrackerUtils:SetTomTomTarget`. A complete quest uses
   `TrackerUtils.SetQuestTomTomTarget` (the turn-in). With no spawn data, as
   Questie's "Set TomTom Target" does: an objective focus uses that
   objective's `spawnList` with `DistanceUtils.GetNearestObjective`, a quest
-  focus `SetQuestTomTomTarget`. Pointed again when the focus, the unfinished
+  focus `SetQuestTomTomTarget`. A guide step: see "With Zygor Guides Viewer" and
+  "With RestedXP".
+  Pointed again when the focus, the unfinished
   objectives, the macro's quest mobs, or completion change; when the setting
   is turned on; never at login, so a waypoint of the player's own stays.
 - Both call Questie's private modules through `QuestieLoader:ImportModule`
@@ -203,17 +373,22 @@ Dyre's Toolkit (`DyresToolkit`, its own repository, owned by the coordinating
 session; do not edit it here) gives Dyre's AddOns one settings home, a
 minimap menu, and widgets (contract 2). The Quest Target box is a widget.
 
-- TOC: `## Dependencies: DyresToolkit` (required since 1.1.0, for the box,
-  as every Dyre's AddOn with frames) and `## Group: DyresToolkit` nests DQT
-  under the toolkit in the in-game AddOn list. CurseForge uploads list `dyres-toolkit`
-  as a required dependency, so the app installs it; Questie (334372) and
-  TomTom (18808) are optional dependencies (author: "Works best with both").
+- TOC: `## OptionalDeps: DyresToolkit, QuestieDB, Questie`, no
+  `## Dependencies` (author, 1.3.0: DQT needs the toolkit for the Quest Target
+  box, but without it DQT still loads, keeps the macro working, and says once
+  what to install; CurseForge installs the toolkit), and `## Group:
+  DyresToolkit` nests DQT under the toolkit in the in-game AddOn list.
+  CurseForge uploads list
+  `dyres-toolkit` and `questiedb` (project 1696795, by Lawgon, its own
+  CurseForge project since 2026-11) as required dependencies, so the app
+  installs them; Questie (334372) and TomTom (18808) are optional
+  dependencies (author: "Works best with both").
   TomTom is not in the TOC: DQT reads `_G.TomTom` only when it points, after
   login, never at load time.
 - When `DyresToolkit.RequireContract(2)` returns the toolkit, Core calls
   `RegisterAddOn` (addon, title, `openSettings = DQT.OpenSettings`) and
   Options makes the page with `RegisterSettingsCategory`, under "Dyre's
-  AddOns", with the same settings and Questie section heading. `/dqt` still
+  AddOns", with the same settings and Integrations section heading. `/dqt` still
   opens DQT's own page.
 - Otherwise (an older toolkit, or no page from it), the macro works as
   before with a top-level page and no box, and one chat line at login says
@@ -236,7 +411,8 @@ minimap menu, and widgets (contract 2). The Quest Target box is a widget.
   slightly lighter, 0.13, 0.13, 0.14, so it reads); gold edges and titles in
   both. A change only re-colors, so it applies at once, also in combat. The
   author chose brown as the default: "it's classic". Opacity fades the whole box.
-- Header (author): one line, "<quest> (Questie)" or "<quest> (Focus)", plus
+- Header (author): one line, "<quest> (Questie)", "(Zygor)", "(RestedXP)", or
+  "(Focus)", plus
   " · ready to turn in"; "No focused quest"; "Macro off: ..." when DQT is
   off. Under it, "Objective: <text>" for a Questie objective focus.
 - Sections, each title with its count: "Targets, most wanted first" (kill
@@ -381,9 +557,11 @@ minimap menu, and widgets (contract 2). The Quest Target box is a widget.
   Dyre's Toolkit, and startup; Quest builds the focused quest's names; Macro builds and writes the
   macro; Box draws the Quest Target box; Options owns the settings page and
   the spellbook list.
-- tests/toolkit holds a copy of Dyre's Toolkit's Core, Layout, Widgets, and
-  Settings files, which the suite loads; a test fails when the copy differs
-  from ../DyresToolkit. Copy them again after a toolkit change.
+- The suite loads the real Dyre's Toolkit (Core, Layout, Widgets, Settings)
+  from ../DyresToolkit when that folder exists, else the copy in tests/toolkit
+  (as in CI). No test compares the copy with the toolkit (author: shared files
+  are not checked byte for byte); a test checks the contract and the
+  functions DQT calls. Refresh the copy when CI needs newer toolkit behavior.
 - artwork/ holds the logo (SVG source, 1024 and 512 PNG renders) and
   screenshots/ for listings; it is never packaged.
 - tests/run.lua holds the Lua 5.1 mock suite. tests/test_*.py cover the

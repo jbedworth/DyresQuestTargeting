@@ -26,6 +26,10 @@ Locally, use the portable Lua 5.1 and Python under Mage Tools Forever's ignored
 `.tools/` folder (or a copy here); CI uses ubuntu-24.04's `lua5.1` package and
 native `python3`.
 
+`tests/run.lua` loads the real Dyre's Toolkit from `../DyresToolkit` when that
+folder exists, and the copy in `tests/toolkit` otherwise (as in CI); its first
+line says which. No test compares the two.
+
 ## Source findings
 
 - Forever is game type "Camelot": `WOW_PROJECT_ID = 18`
@@ -191,9 +195,11 @@ With `/dqt debug` for details:
     fold.
 20. With Dyre's Toolkit: the AddOn list shows DQT under Dyre's Toolkit; the
     settings page is Options > AddOns > Dyre's AddOns > Quest Targeting, with
-    the Questie and Quest Target Box section headings; `/dqt` and the
+    the Integrations (Experimental) and Quest Target Box section headings; `/dqt` and the
     toolkit's minimap menu open it; no toolkit line in chat. Disable the
-    toolkit: the AddOn list says DQT needs it, and DQT does not load.
+    toolkit and `/reload`: DQT still loads, says once that the Quest Target
+    box needs Dyre's Toolkit (install it from CurseForge), the macro works,
+    there is no box, and the settings page is at the top level.
 18. `/dqt` opens the settings page; in combat it says it opens out of combat
     and opens nothing. `/dqt list` works in and out of combat.
 17. "Use an account-wide macro" on: "! Target (DQT)" appears in the General
@@ -215,7 +221,7 @@ With `/dqt debug` for details:
     their tooltips say what they need. Questie on, TomTom off: only the
     TomTom setting is greyed out. Both on: none. The checks keep their
     values across these.
-29. Classic Era (and Anniversary), "Load out of date AddOns" ticked: with
+29. Classic Era (and Anniversary, with "Load out of date AddOns" ticked): with
     Questie, DQT starts (no "lacks" line); focus a quest in Questie's
     tracker: the macro and the box follow it. "Follow Questie's tracker
     focus" is on and greyed, the sync setting greyed, both tooltips say why.
@@ -237,6 +243,47 @@ With `/dqt debug` for details:
     focused quest moves it; Focus Objective points at that objective's
     mobs; finishing an objective, then the quest, moves it again (the
     turn-in last). A /reload does not move it.
+30. With Zygor Guides Viewer (and Questie): "Follow Zygor's current step"
+    is on, under "Integrations (Experimental)" with the Questie and TomTom
+    settings (the main section has none of them; no setting name says
+    "(experimental)" or is cut off); with Zygor disabled and `/reload`, it is greyed
+    with a tooltip line. Log in on a guide step with a kill or talk goal:
+    the macro and the box follow Zygor's step at once (header
+    "<quest> (Zygor)", the line under it "Zygor: step N of <guide>"), before
+    you complete a step. A step with goals for two quests lists the mobs of
+    both; a sticky step's mobs come first in the macro, the step's own last.
+    Focus another quest in Questie's tracker: it wins; kill a mob of
+    Zygor's step: Questie's focus stays. Complete a Zygor step: the next
+    step wins, chat says "Focused quest changed via Zygor (...)", and the
+    game focus Zygor sets on its first quest does not take over. Focus a
+    quest that is not in the step in the game's quest log: it wins. A goto
+    or text step: the quest focus counts. A goal done: its name leaves, with
+    the chat line. A loading screen does not change the focus. With "Point
+    TomTom at the focused quest" on: a `/reload` does not move the arrow, also
+    when Zygor's step appears seconds later; the next step with a location
+    moves it to the goal Zygor's arrow points at (`/dqt debug` shows "guide
+    location"), also a travel step; click another goal with a location in
+    Zygor's window, or reach a goto goal: the arrow moves, and the old TomTom pin
+    goes. A step with no location points at a mob or NPC of `/dqt list`. A focus
+    in Questie's tracker takes the arrow back. Turn Questie off: the arrow still
+    follows a location. `/dqt debug` shows the step and "latest". No Lua errors.
+31. With RestedXP (and Questie, QuestieDB, TomTom): "Follow RestedXP's current
+    step" is on, under "Integrations (Experimental)"; with RestedXP disabled and
+    `/reload`, it is greyed. Log in on a step with `.mob` tags: the macro and box
+    follow it (header "<quest> (RestedXP)", then "RestedXP: step N of <guide>"),
+    with sticky steps' names first in the macro. Finish a `+` objective: its name
+    leaves, with the chat line. Focus another quest in Questie's tracker: it
+    wins, and RestedXP's own game focus does not take it back; the next step wins
+    with "Focused quest changed via RestedXP (...)". Focus a quest outside the
+    step in the game's quest log: it wins. "Point TomTom at the focused quest" on:
+    `/reload` does not move the arrow, also when RestedXP's map fills a moment
+    later; the next step moves it to where RestedXP's arrow points (`/dqt debug`
+    shows "guide location"), also a trainer or travel step. Walk to a step's
+    first `.goto` of several: both arrows move on, within about a second, and the
+    old TomTom pin goes. A sticky step with a `.goto`: both point at it. A
+    step with `.mob` tags and no location: a name of `/dqt list`. `RXPTargeting`
+    keeps its own text. `/dqt debug` shows the step. No Lua errors. With Zygor too: Zygor's step
+    wins at login, then the latest new step.
 16. With Questie, an item quest (The Totem of Infliction: Ghoul Fang has six
     droppers): `/dqt list` lists the droppers with drop rates, the best last in
     the macro; `/dqt debug` lists every dropper and its rate, and no

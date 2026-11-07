@@ -31,10 +31,19 @@ end
 
 local ADDON = "DyresQuestTargeting"
 local RUNTIME_FILES = {"Commands.lua", "Core.lua", "Quest.lua", "Macro.lua", "Box.lua", "Options.lua"}
--- Dyre's Toolkit's files the tests load (a copy in tests/toolkit, checked
--- against ../DyresToolkit when that folder is there). Not the minimap, which
--- needs the embedded libraries.
+-- Dyre's Toolkit's files the tests load: the real toolkit in ../DyresToolkit
+-- when that folder is there, else the copy in tests/toolkit (as in CI). Not
+-- the minimap, which needs the embedded libraries.
 local TOOLKIT_FILES = {"Core.lua", "Layout.lua", "Widgets.lua", "Settings.lua"}
+local TOOLKIT_DIR = "tests/toolkit/"
+do
+    local real = io.open("../DyresToolkit/Core.lua", "rb")
+    if real then
+        real:close()
+        TOOLKIT_DIR = "../DyresToolkit/"
+    end
+end
+print("Dyre's Toolkit from " .. TOOLKIT_DIR)
 local PAGE = "Dyre's Quest Targeting"
 -- Under "Dyre's AddOns", the toolkit says "Dyre's " once (its ShortName).
 local SHORT_PAGE = "Quest Targeting"
@@ -63,7 +72,8 @@ local function questieDB(data, contract)
     end
     return {
         RequireContract = function(required) return required <= (contract or 4) end,
-        Quest = {objectives = reader(data.quests, "objectives"), finishedBy = reader(data.quests, "finishedBy")},
+        Quest = {objectives = reader(data.quests, "objectives"), finishedBy = reader(data.quests, "finishedBy"),
+            startedBy = reader(data.quests, "startedBy")},
         Npc = {name = function(id) return data.npcs[id] end},
         Item = {name = reader(data.items, "name"), npcDrops = reader(data.items, "drops")},
     }
@@ -239,6 +249,87 @@ local function fixture(options)
     end
     if options.tomtom then
         env.TomTom = {}
+    end
+    -- TomTom's own calls, as a guide step's location uses them. options.tomtomApi.
+    if options.tomtomApi then
+        state.tomtomPoints, state.tomtomRemoved = {}, {}
+        env.TomTom = {}
+        function env.TomTom:AddWaypoint(map, x, y, opts)
+            local point = {map = map, x = x, y = y, opts = opts, text = map .. " " .. x .. "," .. y}
+            state.tomtomPoints[#state.tomtomPoints + 1] = point
+            return point
+        end
+        function env.TomTom:RemoveWaypoint(uid)
+            state.tomtomRemoved[#state.tomtomRemoved + 1] = uid
+        end
+    end
+    -- Zygor Guides Viewer: only the fields DQT reads, as its source names
+    -- them (a paid AddOn: none of its code is here). options.zygor.step and
+    -- .stickies are the shown steps; options.zygor.noMessages leaves out
+    -- AddMessageHandler.
+    -- RestedXP: only the fields DQT reads, as its source names them, through
+    -- AceAddon. options.rxp.steps are the active steps in RestedXP's order.
+    if options.rxp then
+        local addon = {RXPFrame = not options.rxp.noFrame and {activeSteps = options.rxp.steps or {}} or nil,
+            currentGuide = {name = "1-10 Teldrassil"}, targeting = {}, activeWaypoints = options.rxp.waypoints}
+        state.mapUpdates = 0
+        function addon.UpdateMap(resetPins)
+            if resetPins then state.mapUpdates = state.mapUpdates + 1 end
+        end
+        -- As UpdateMap(true): a new arrow list. UpdateMap() only sets a flag.
+        function state.rxpMap(waypoints)
+            addon.activeWaypoints = waypoints
+            addon.UpdateMap(true)
+        end
+        state.unitListUpdates = 0
+        function addon.targeting:UpdateUnitList() state.unitListUpdates = state.unitListUpdates + 1 end
+        local ace = {GetAddon = function(_, name, silent)
+            equal(silent, true, "asks silently")
+            if name == "RXPGuides" then return addon end
+        end}
+        env.LibStub = {GetLibrary = function(_, name, silent)
+            equal(silent, true, "asks silently")
+            if name == "AceAddon-3.0" then return ace end
+        end}
+        -- As SetStep: the new active steps; RestedXP then updates its list.
+        function state.rxpSteps(steps)
+            local active = addon.RXPFrame.activeSteps
+            for index = #active, 1, -1 do active[index] = nil end
+            for index, step in ipairs(steps) do active[index] = step end
+            addon.targeting:UpdateUnitList()
+        end
+        state.rxp = addon
+    end
+    if options.zygor then
+        local zgv = {CurrentGuide = {title = "Leveling Guides\\Elwynn Forest (1-13)",
+            title_short = "Elwynn Forest (1-13)"}, CurrentStep = options.zygor.step,
+            CurrentStickies = options.zygor.stickies}
+        local handlers = {}
+        if not options.zygor.noMessages then
+            -- As Zygor's: handler(self, message, ...), unprotected.
+            function zgv:AddMessageHandler(message, handler)
+                handlers[#handlers + 1] = {message = message, handler = handler}
+            end
+        end
+        function state.zygorSend(message, ...)
+            for _, entry in ipairs(handlers) do
+                if entry.message == message then entry.handler(zgv, message, ...) end
+            end
+        end
+        -- As ZGV:FocusStep: the new step, with track Zygor's own game focus
+        -- on the step's first quest (ZGV:TrackQuest), then ZGV_STEP_CHANGED.
+        function state.zygorStep(step, stickies, track)
+            zgv.CurrentStep, zgv.CurrentStickies = step, stickies
+            for _, each in ipairs(track and step.goals or {}) do
+                if each.questid then
+                    env.C_SuperTrack.SetSuperTrackedQuestID(each.questid)
+                    break
+                end
+            end
+            state.zygorSend("ZGV_STEP_CHANGED", step.num)
+        end
+        state.zygor = zgv
+        env.ZygorGuidesViewer = zgv
     end
 
     -- Macros: account slots 1-120, character slots from 121, as the client
@@ -505,7 +596,7 @@ local function fixture(options)
     if not options.noToolkit then
         state.toolkitNS = {InitializeMinimap = function() end}
         for _, path in ipairs(TOOLKIT_FILES) do
-            local chunk = assert(loadfile("tests/toolkit/" .. path))
+            local chunk = assert(loadfile(TOOLKIT_DIR .. path))
             setfenv(chunk, env)
             chunk("DyresToolkit", state.toolkitNS)
         end
@@ -568,7 +659,7 @@ local CONDOR_QUEST = {[101] = {title = "The Condor Hunt", objectives = {
 
 test("logs in with a banner and makes the character macro", function()
     local state = fixture()
-    contains(state.messages[1], "DQT: Dyre's Quest Targeting 1.2.0 by Dyre")
+    contains(state.messages[1], "DQT: Dyre's Quest Targeting 1.3.0 by Dyre")
     equal(state.said("Ready."), true)
     equal(state.dqt.available, true)
     contains(state.macro(), "nothing to target")
@@ -649,6 +740,7 @@ test("the most recent focus wins, game or Questie", function()
     state.advance()
     contains(state.macro(), "/targetexact Kobold", "Questie unfocused: the game's focus again")
 end)
+
 
 test("the game restoring its focus on a loading screen does not beat Questie's", function()
     local state = fixture({quests = THREE_QUESTS, focus = 1, questie = {focus = 2}})
@@ -807,20 +899,33 @@ test("sync does nothing while Follow Questie's tracker focus is off, or without 
     equal(bare.focusSets, nil, "the game's focus is left alone")
 end)
 
-test("the Questie settings sit under an experimental section heading", function()
+test("every integration setting sits under the experimental Integrations heading", function()
     local state = fixture()
     local list = state.registered.initializers
     local heading
     for index, object in ipairs(list) do
-        if object.header == "Questie Synchronization (Experimental)" then heading = index end
+        if object.header == "Integrations (Experimental)" then heading = index end
     end
-    equal(list[heading + 1].setting.variable, "DQT_SYNC_FOCUS")
-    equal(list[heading + 2].setting.variable, "DQT_TOMTOM")
-    contains(list[heading + 1].setting.name, "(experimental)")
-    contains(list[heading + 2].tooltip, "Use with caution.")
+    local INTEGRATIONS = {"DQT_QUESTIE_FOCUS", "DQT_ZYGOR_FOCUS", "DQT_RXP_FOCUS", "DQT_SYNC_FOCUS", "DQT_TOMTOM"}
+    for offset, variable in ipairs(INTEGRATIONS) do
+        equal(list[heading + offset].setting.variable, variable)
+    end
+    for index = 1, heading - 1 do
+        local variable = list[index].setting and list[index].setting.variable
+        equal(variable == "DQT_QUESTIE_FOCUS" or variable == "DQT_ZYGOR_FOCUS" or variable == "DQT_RXP_FOCUS", false,
+            "the main section keeps only the macro's own settings")
+    end
+    for offset = 1, #INTEGRATIONS do
+        lacks(list[heading + offset].setting.name, "xperimental", "the heading says it")
+    end
+    equal(list[heading + 2].setting.name, "Follow Zygor's current step")
+    contains(list[heading + 5].tooltip, "Use with caution.")
+    equal(list[heading + 3].setting.name, "Follow RestedXP's current step")
     local bare = fixture({noSectionHeaders = true})
-    equal(bare.settings.DQT_SYNC_FOCUS.name, "Keep Questie's and the game's focus in sync (experimental)",
-        "without headings, the settings are still there")
+    equal(bare.settings.DQT_SYNC_FOCUS.name, "Keep Questie's and the game's focus in sync",
+        "without headings, the settings are still there, with the same names")
+    equal(bare.settings.DQT_ZYGOR_FOCUS.name, "Follow Zygor's current step")
+    equal(bare.settings.DQT_TOMTOM.name, "Point TomTom at the focused quest")
 end)
 
 -- The settings row for a variable.
@@ -839,7 +944,7 @@ test("Questie and TomTom settings are greyed out without their AddOns; saved val
     end
     contains(settingRow(none, "DQT_QUESTIE_FOCUS").tooltip, "Needs Questie: greyed out until it is installed")
     contains(settingRow(none, "DQT_SYNC_FOCUS").tooltip, "Needs Questie:")
-    contains(settingRow(none, "DQT_TOMTOM").tooltip, "Needs Questie and TomTom:")
+    contains(settingRow(none, "DQT_TOMTOM").tooltip, "Needs TomTom, with Questie, Zygor, or RestedXP:")
     equal(settingRow(none, "DQT_MARK"):Enabled(), true, "other settings stay on")
     local db = none.env.DyresQuestTargetingDB
     equal(db.syncFocus and db.tomtom and db.questieFocus, true, "the saved values stay as they were")
@@ -855,6 +960,11 @@ test("Questie and TomTom settings are greyed out without their AddOns; saved val
     none.env.QuestieLoader = {ImportModule = function() return {} end}
     none.env.TomTom = {}
     equal(settingRow(none, "DQT_TOMTOM"):Enabled(), true, "loaded after the page was built")
+    local guide = fixture({quests = TWO_QUESTS, focus = 1, tomtom = true, rxp = {steps = {}}})
+    equal(settingRow(guide, "DQT_TOMTOM"):Enabled(), true, "TomTom and a guide, no Questie")
+    equal(settingRow(guide, "DQT_SYNC_FOCUS"):Enabled(), false, "the sync still needs Questie")
+    local guideOnly = fixture({quests = TWO_QUESTS, focus = 1, rxp = {steps = {}}})
+    equal(settingRow(guideOnly, "DQT_TOMTOM"):Enabled(), false, "a guide, no TomTom")
 end)
 
 test("classic: without the game's focus, DQT follows Questie's; the focus settings are greyed", function()
@@ -1283,7 +1393,7 @@ test("markers follow the settings, and the mark switch turns them off", function
     state.settings.DQT_MOB_MARKER:SetValue(8)
     state.settings.DQT_MARK:SetValue(false)
     lacks(state.macro(), "/tm", "marking off for purists")
-    local choices = state.settings.DQT_MOB_MARKER and state.registered.initializers[4].options()
+    local choices = state.settings.DQT_MOB_MARKER and state.registered.initializers[3].options()
     equal(choices[1].label, "None")
     equal(choices[5].label, "Triangle (green)")
     equal(choices[9].label, "Skull")
@@ -1389,7 +1499,7 @@ end)
 
 test("the opener lists every spellbook spell and rank, and casts the one picked", function()
     local state = fixture({quests = CONDOR_QUEST, focus = 101, globals = spellbookGlobals()})
-    local opener = state.registered.initializers[6]
+    local opener = state.registered.initializers[5]
     equal(opener.setting.variable, "DQT_OPENER")
     local labels = {}
     for _, choice in ipairs(opener.options()) do labels[#labels + 1] = choice.label end
@@ -1411,7 +1521,7 @@ end)
 
 test("each dropdown sets its own label function, so a pooled frame's stale one is replaced", function()
     local state = fixture()
-    for _, index in ipairs({4, 5, 6}) do
+    for _, index in ipairs({3, 4, 5}) do
         local dropdown = state.registered.initializers[index]
         equal(type(dropdown.getSelectionTextFunc), "function", dropdown.setting.variable)
         equal(dropdown.getSelectionTextFunc(), nil, "nil keeps the chosen option's own text")
@@ -1421,17 +1531,17 @@ end)
 test("without the spell info API, the opener lists every spell, as before", function()
     local state = fixture({globals = spellbookGlobals(true)})
     local labels = {}
-    for _, choice in ipairs(state.registered.initializers[6].options()) do labels[#labels + 1] = choice.label end
+    for _, choice in ipairs(state.registered.initializers[5].options()) do labels[#labels + 1] = choice.label end
     contains(table.concat(labels, ","), "Wrath(Rank 1)")
     contains(table.concat(labels, ","), "Mark of the Wild(Rank 1)")
 end)
 
 test("a spell picked earlier stays in the list after the spellbook loses it", function()
     local state = fixture({globals = spellbookGlobals(), saved = {opener = "Rake(Rank 2)"}})
-    local choices = state.registered.initializers[6].options()
+    local choices = state.registered.initializers[5].options()
     equal(choices[#choices].label, "Rake(Rank 2)")
     local bare = fixture({saved = {opener = "Rake(Rank 2)"}})
-    choices = bare.registered.initializers[6].options()
+    choices = bare.registered.initializers[5].options()
     equal(#choices, 3, "without the spellbook API, the saved spell and the two fixed choices")
 end)
 
@@ -2448,11 +2558,12 @@ end)
 
 local TOOLKIT_HINT = "The Quest Target box needs Dyre's Toolkit 2.0 or later"
 
-test("toolkit: the TOC requires it and nests under it; Box.lua loads before Options.lua", function()
+test("toolkit: the TOC lists it as optional and nests under it; Box.lua loads before Options.lua", function()
     local state = fixture()
-    equal(state.toc.Dependencies, "DyresToolkit")
+    equal(state.toc.Dependencies, nil, "no Dependencies line: DQT loads without it and says what to install")
+    contains(state.toc.OptionalDeps, "DyresToolkit")
+    contains(state.toc.OptionalDeps, "QuestieDB")
     equal(state.toc.Group, "DyresToolkit")
-    lacks(state.toc.OptionalDeps, "DyresToolkit")
     local text = assert(io.open(ADDON .. ".toc")):read("*a")
     contains(text, "Macro.lua\nBox.lua\nOptions.lua")
 end)
@@ -2464,9 +2575,9 @@ test("toolkit: the settings page sits under Dyre's AddOns and DQT joins its menu
     equal(state.home.name, "Dyre's AddOns")
     local heading
     for index, object in ipairs(state.registered.initializers) do
-        if object.header == "Questie Synchronization (Experimental)" then heading = index end
+        if object.header == "Integrations (Experimental)" then heading = index end
     end
-    equal(type(heading), "number", "the Questie heading is on the toolkit's page")
+    equal(type(heading), "number", "the Integrations heading is on the toolkit's page")
     local member
     for _, info in ipairs(state.toolkit.AddOns()) do
         if info.addon == ADDON then member = info end
@@ -2501,16 +2612,16 @@ test("toolkit: without Dyre's Toolkit 2, the macro works, with its own page, no 
     end
 end)
 
-test("toolkit: the copy the tests load matches ../DyresToolkit when it is there", function()
-    for _, path in ipairs(TOOLKIT_FILES) do
-        local own = io.open("../DyresToolkit/" .. path, "rb")
-        if own then
-            local copy = assert(io.open("tests/toolkit/" .. path, "rb"))
-            equal(copy:read("*a") == own:read("*a"), true, "tests/toolkit/" .. path .. " is stale: copy it again")
-            copy:close()
-            own:close()
-        end
+test("toolkit: the loaded toolkit offers contract 2 and every function DQT calls", function()
+    local state = fixture()
+    local toolkit = state.toolkit.RequireContract(2)
+    equal(type(toolkit), "table", "contract 2")
+    for _, name in ipairs({"RegisterAddOn", "RegisterSettingsCategory", "CreateWidget", "AddWidgetSettings",
+            "ResetWidgets", "Widgets", "Unlock", "Lock", "IsLocked", "AddOns"}) do
+        equal(type(toolkit[name]), "function", name)
     end
+    equal(type(state.dqt.box.SetContentSize), "function", "widgets have SetContentSize")
+    equal(type(state.dqt.box.AddDragHandle), "function", "and AddDragHandle")
 end)
 
 test("a clash on /dqt is reported, with the backup command", function()
@@ -2535,6 +2646,675 @@ test("objective names come from English kill text in either order", function()
     local hidden = secret()
     state.secrets[hidden] = true
     equal(name(hidden), nil)
+end)
+
+-- A Zygor goal: its status through GetStatus, as Goal:GetStatus answers.
+local function zgoal(fields, status)
+    fields.fakeStatus = status or "incomplete"
+    function fields:GetStatus() return self.fakeStatus end
+    return fields
+end
+
+local function zstep(num, goals)
+    return {num = num, goals = goals}
+end
+
+-- Each name's line comes after the one before it in the macro.
+local function inOrder(body, names)
+    local last = 0
+    for _, name in ipairs(names) do
+        local at = body:find("/targetexact " .. name .. "\n", 1, true)
+        equal(at ~= nil, true, name .. " is in the macro")
+        equal(at > last, true, name .. " comes after the name before it")
+        last = at
+    end
+end
+
+local function zygorStepThree()
+    return zstep(3, {
+        zgoal({action = "talk", npc = "Marshal McBride", npcid = 197}, "passive"),
+        zgoal({action = "kill", target = "Gnoll Runt", targetid = 40, questid = 2}),
+        zgoal({action = "kill", targets = {{"Timber Wolf", 69}, {"Young Wolf", 299}}}, "passive"),
+        zgoal({action = "collect", mobs = {{name = "Forest Spider", id = 30, pl = false}}}),
+        zgoal({action = "avoid", mobs = {{name = "Hogger", id = 448, pl = false}}}),
+        zgoal({action = "kill", target = "Done Mob"}, "complete"),
+        zgoal({action = "kill", target = "Hidden Mob"}, "hidden"),
+        zgoal({action = "kill", target = "Defias Thugs", targetid = 38, plural = true}),
+    })
+end
+
+local ZYGOR_STICKY = zstep(9, {zgoal({action = "kill", target = "Gnoll Runt"}),
+    zgoal({action = "kill", target = "Sticky Boar"})})
+
+test("zygor: the step's open goals and its sticky steps become /targetexact lines, the first goal last", function()
+    local state = fixture({quests = TWO_QUESTS, questie = {focus = 1},
+        zygor = {step = zygorStepThree(), stickies = {ZYGOR_STICKY}}})
+    local body = state.macro()
+    inOrder(body, {"Sticky Boar", "Forest Spider", "Timber Wolf", "Young Wolf", "Gnoll Runt", "Marshal McBride"})
+    local _, count = body:gsub("Gnoll Runt", "")
+    equal(count, 1, "a name on two steps is one line, at its most important place")
+    for _, name in ipairs({"Hogger", "Done Mob", "Hidden Mob", "Defias"}) do
+        lacks(body, name, "avoid, complete, hidden, and a plural name without QuestieDB are left out")
+    end
+    lacks(body, "/targetexact Boar", "Zygor's step wins over Questie's focus at login")
+    local lines = boxLines(state)
+    equal(lines[1], "Wolves (Zygor)", "the step's first open quest, and the source")
+    equal(lines[2], "Zygor: step 3 of Elwynn Forest (1-13)")
+    equal(boxRow(state, "Marshal McBride talk to") ~= nil, true)
+    state.slash("list")
+    equal(state.said("Focused quest: Wolves (Zygor's step 3 of Elwynn Forest (1-13))"), true)
+    equal(state.said("Marshal McBride (talk to)"), true)
+    state.slash("add Hogger")
+    inOrder(state.macro(), {"Marshal McBride"})
+    contains(state.macro(), "/tar Hogger\n/targetlasttarget", "the hit list still goes last")
+end)
+
+test("zygor: a plural name is QuestieDB's name for its NPC; raw status fields count too", function()
+    local db = {quests = {}, items = {}, npcs = {[38] = "Defias Thug"}}
+    local step = zstep(5, {{action = "kill", target = "Defias Thugs", targetid = 38, plural = true,
+        status = "incomplete"}, {action = "talk", npc = "Old Done", status = "complete"}})
+    local state = fixture({quests = TWO_QUESTS, db = db, zygor = {step = step}})
+    contains(state.macro(), "/targetexact Defias Thug\n")
+    lacks(state.macro(), "Thugs")
+    lacks(state.macro(), "Old Done")
+    equal(boxLines(state)[1], "Guide step 5 of Elwynn Forest (1-13) (Zygor)", "no quest in the step")
+end)
+
+test("zygor: the latest focus wins among Zygor, Questie, and the game", function()
+    local state = fixture({quests = THREE_QUESTS, questie = {}, zygor = {step = zygorStepThree()}})
+    contains(state.macro(), "/targetexact Marshal McBride", "Zygor's step at login")
+    state.questieUtils:FocusQuest(1)
+    state.advance()
+    contains(state.macro(), "/targetexact Boar", "focusing in Questie's tracker wins")
+    lacks(state.macro(), "Gnoll")
+    state.zygorSend("ZGV_GOAL_PROGRESS", 3, 2)
+    state.advance()
+    contains(state.macro(), "/targetexact Boar", "goal progress is not a focus change")
+    state.clear()
+    local four = zstep(4, {zgoal({action = "kill", target = "Murloc Forager", questid = 2}),
+        zgoal({action = "kill", target = "Murloc Streamrunner", questid = 2})})
+    state.zygorStep(four, nil, true)
+    state.advance()
+    contains(state.macro(), "/targetexact Murloc Forager", "a new step wins, also with Zygor's own game focus")
+    lacks(state.macro(), "Boar")
+    state.env.C_SuperTrack.SetSuperTrackedQuestID(0)
+    state.env.C_SuperTrack.SetSuperTrackedQuestID(2)
+    state.advance()
+    contains(state.macro(), "/targetexact Murloc Forager", "a game focus on the step's quest keeps Zygor's")
+    equal(state.said("Focused quest changed via Zygor (Wolves), targeting updated to Murloc Forager."), true)
+    state.clear()
+    four.goals[2].fakeStatus = "complete"
+    state.zygorSend("ZGV_GOAL_COMPLETED", 4, 2)
+    state.advance()
+    lacks(state.macro(), "Streamrunner")
+    equal(state.said("Murloc Streamrunner removed: Quest Wolves objective completed."), true)
+    state.focus = 3
+    state.emit("SUPER_TRACKING_CHANGED")
+    state.advance()
+    contains(state.macro(), "/targetexact Kobold", "focusing another quest in the game wins")
+    state.zygorSend("ZGV_STEP_CHANGED", 4)
+    state.advance()
+    contains(state.macro(), "/targetexact Kobold", "the same step again (Zygor's sticky update) is no change")
+end)
+
+test("zygor: a step that names no one, the switch off, and a step while the world loads", function()
+    local state = fixture({quests = TWO_QUESTS, questie = {focus = 1}, zygor = {step = zygorStepThree()}})
+    equal(state.env.DyresQuestTargetingDB.zygorFocus, true, "on by default")
+    state.zygorStep(zstep(6, {zgoal({action = "goto"}), zgoal({action = "text"})}))
+    state.advance()
+    contains(state.macro(), "/targetexact Boar", "a travel step leaves the quest focus in charge")
+    state.zygorStep(zygorStepThree())
+    state.advance()
+    contains(state.macro(), "/targetexact Gnoll Runt")
+    state.settings.DQT_ZYGOR_FOCUS:SetValue(false)
+    contains(state.macro(), "/targetexact Boar", "off: Zygor's step is ignored")
+    state.settings.DQT_ZYGOR_FOCUS:SetValue(true)
+    state.questieUtils:FocusQuest(1)
+    state.advance()
+    state.emit("PLAYER_LEAVING_WORLD")
+    state.zygorStep(zstep(7, {zgoal({action = "kill", target = "Loading Mob"})}))
+    state.emit("PLAYER_ENTERING_WORLD")
+    state.advance(3)
+    contains(state.macro(), "/targetexact Boar", "a step Zygor restores while the world loads is no change")
+end)
+
+test("zygor: changed or missing fields fall back to the quest focus; the setting is greyed out without it", function()
+    local broken = fixture({quests = TWO_QUESTS, focus = 1, zygor = {step = "broken", stickies = 5}})
+    contains(broken.macro(), "/targetexact Boar")
+    broken.zygor.CurrentStep = {num = "x", goals = {"goal", 7, {action = "kill", target = 5},
+        {action = "kill", targets = "none"}, {action = "from", mobs = {"bad", {name = {}}}},
+        {action = "kill", target = "No Status"}, {action = "talk", npc = "Bad;Name", status = "incomplete"}}}
+    broken.zygor.CurrentStickies = {"sticky", {goals = 3}}
+    broken.zygorSend("ZGV_STEP_CHANGED", 1)
+    broken.advance()
+    contains(broken.macro(), "/targetexact Boar", "nothing usable: the quest focus")
+    local none = fixture({quests = TWO_QUESTS, focus = 1, saved = {zygorFocus = true}})
+    equal(settingRow(none, "DQT_ZYGOR_FOCUS"):Enabled(), false, "greyed out without Zygor")
+    contains(settingRow(none, "DQT_ZYGOR_FOCUS").tooltip, "Needs Zygor Guides Viewer: greyed out")
+    equal(none.env.DyresQuestTargetingDB.zygorFocus, true, "the saved value stays")
+    local silent = fixture({quests = TWO_QUESTS, focus = 1, zygor = {step = zygorStepThree(), noMessages = true}})
+    equal(settingRow(silent, "DQT_ZYGOR_FOCUS"):Enabled(), false, "without its message handlers")
+    local zygor = fixture({quests = TWO_QUESTS, focus = 1, zygor = {}})
+    equal(settingRow(zygor, "DQT_ZYGOR_FOCUS"):Enabled(), true)
+end)
+
+-- A RestedXP step: its number and elements (as its .mob, .target, .unitscan,
+-- .complete, .turnin, .accept tags leave them).
+local function rstep(index, elements, sticky)
+    return {index = index, elements = elements, sticky = sticky, active = true}
+end
+
+local RXP_DB = {items = {[60] = {name = "Wolf Fang", drops = {41}}}, npcs = {[40] = "Gnoll Runt", [41] = "Timber Wolf",
+    [42] = "Zenn Foulhoof", [43] = "Tenaron Stormgrip", [70] = "Name From ID"},
+    quests = {[2] = {objectives = {{{40, "Gnoll Runt slain"}}, nil, {{60}}}, finishedBy = {{42}}, startedBy = {{43}}}}}
+local RXP_SPAWNS = {[40] = {name = "Gnoll Runt", at = {10, 20}, zone = 141, far = 50},
+    [41] = {name = "Timber Wolf", at = {30, 40}, zone = 141, far = 5},
+    [42] = {name = "Zenn Foulhoof", at = {50, 60}, zone = 141, far = 9},
+    [43] = {name = "Tenaron Stormgrip", at = {70, 80}, zone = 141, far = 7}}
+
+local function rxpStepThree()
+    return rstep(3, {{questId = 2}, {mobs = {"Gnoll Runt"}}, {unitscan = {"Rare Boar"}},
+        {targets = {"Zenn Foulhoof", "70"}}, {mobs = nil, parent = {completed = true}}})
+end
+
+test("rxp: the active steps' tags become /targetexact lines, the current step and its first tag last", function()
+    local sticky = rstep(1, {{mobs = {"Sticky Spider", "Gnoll Runt"}}})
+    local state = fixture({quests = TWO_QUESTS, questie = {focus = 1}, db = RXP_DB,
+        rxp = {steps = {sticky, rxpStepThree()}}})
+    inOrder(state.macro(), {"Sticky Spider", "Zenn Foulhoof", "Name From ID", "Rare Boar", "Gnoll Runt"})
+    local _, count = state.macro():gsub("Gnoll Runt", "")
+    equal(count, 1, "one line per name, at its most important place")
+    lacks(state.macro(), "/targetexact Boar", "RestedXP's step wins at login, over Questie's focus")
+    lacks(state.macro(), "/targetexact 70", "a bare ID is QuestieDB's name")
+    local lines = boxLines(state)
+    equal(lines[1], "Wolves (RestedXP)")
+    equal(lines[2], "RestedXP: step 3 of 1-10 Teldrassil")
+    equal(boxRow(state, "Zenn Foulhoof talk to") ~= nil, true)
+    state.slash("list")
+    equal(state.said("Focused quest: Wolves (RestedXP's step 3 of 1-10 Teldrassil)"), true)
+    state.clear()
+    state.slash("debug")
+    equal(state.said("debug RestedXP: step 1-10 Teldrassil#3, 2 active"), true)
+    local bare = fixture({quests = TWO_QUESTS, rxp = {steps = {rstep(4, {{mobs = {"99"}}, {targets = {"Named"}}})}}})
+    lacks(bare.macro(), "99", "a bare ID without QuestieDB is left out")
+    contains(bare.macro(), "/targetexact Named")
+    equal(boxLines(bare)[1], "Guide step 4 of 1-10 Teldrassil (RestedXP)", "no quest in the step")
+end)
+
+test("rxp: a new step wins; progress does not; its own game focus does not; a finished + tag leaves", function()
+    local mobTag = {mobs = {"Gnoll Runt"}, parent = {completed = false}}
+    local three = rstep(3, {{questId = 2}, mobTag, {targets = {"Zenn Foulhoof"}}})
+    local state = fixture({quests = THREE_QUESTS, questie = {}, rxp = {steps = {three}}})
+    contains(state.macro(), "/targetexact Gnoll Runt", "at login")
+    equal(state.unitListUpdates, 0)
+    state.questieUtils:FocusQuest(1)
+    state.advance()
+    contains(state.macro(), "/targetexact Boar", "focusing in Questie's tracker wins")
+    state.env.C_SuperTrack.SetSuperTrackedQuestID(2)
+    state.advance()
+    contains(state.macro(), "/targetexact Boar", "RestedXP's own game focus on its quest does not beat Questie's")
+    state.rxp.targeting:UpdateUnitList()
+    state.advance()
+    contains(state.macro(), "/targetexact Boar", "the same step again is no change")
+    state.clear()
+    state.rxpSteps({rstep(4, {{questId = 2}, {mobs = {"Murloc Forager"}}})})
+    state.advance()
+    contains(state.macro(), "/targetexact Murloc Forager", "a new step wins, through the hook")
+    equal(state.said("Focused quest changed via RestedXP (Wolves), targeting updated to Murloc Forager."), true)
+    state.env.C_SuperTrack.SetSuperTrackedQuestID(0)
+    state.env.C_SuperTrack.SetSuperTrackedQuestID(2)
+    state.advance()
+    contains(state.macro(), "/targetexact Murloc Forager", "a game focus on the step's quest keeps RestedXP's")
+    state.env.C_SuperTrack.SetSuperTrackedQuestID(3)
+    state.advance()
+    contains(state.macro(), "/targetexact Kobold", "focusing another quest in the game wins")
+    state.clear()
+    state.rxpSteps({three})
+    state.advance()
+    contains(state.macro(), "/targetexact Gnoll Runt")
+    mobTag.mobs = nil
+    state.rxp.targeting:UpdateUnitList()
+    state.advance()
+    lacks(state.macro(), "Gnoll")
+    equal(state.said("Gnoll Runt removed: Quest Wolves objective completed."), true)
+end)
+
+test("rxp: a step that names no one, the switch off, a step while the world loads, changed fields", function()
+    local state = fixture({quests = TWO_QUESTS, focus = 1, rxp = {steps = {rxpStepThree()}}})
+    equal(state.env.DyresQuestTargetingDB.rxpFocus, true, "on by default")
+    state.rxpSteps({rstep(5, {{text = "Go north"}})})
+    state.advance()
+    contains(state.macro(), "/targetexact Boar", "no one named: the quest focus")
+    state.rxpSteps({rxpStepThree()})
+    state.advance()
+    contains(state.macro(), "/targetexact Gnoll Runt")
+    state.settings.DQT_RXP_FOCUS:SetValue(false)
+    contains(state.macro(), "/targetexact Boar", "off: ignored")
+    state.settings.DQT_RXP_FOCUS:SetValue(true)
+    contains(state.macro(), "/targetexact Gnoll Runt", "on again: still the latest")
+    state.env.C_SuperTrack.SetSuperTrackedQuestID(2)
+    state.advance()
+    contains(state.macro(), "/targetexact Gnoll Runt", "its own quest does not beat it")
+    state.env.C_SuperTrack.SetSuperTrackedQuestID(1)
+    state.advance()
+    contains(state.macro(), "/targetexact Boar", "another quest does")
+    local quest = fixture({quests = THREE_QUESTS, focus = 1, rxp = {steps = {rxpStepThree()}}})
+    quest.env.C_SuperTrack.SetSuperTrackedQuestID(3)
+    quest.advance()
+    contains(quest.macro(), "/targetexact Kobold")
+    quest.emit("PLAYER_LEAVING_WORLD")
+    quest.rxpSteps({rstep(7, {{mobs = {"Loading Mob"}}})})
+    quest.emit("PLAYER_ENTERING_WORLD")
+    quest.advance(3)
+    contains(quest.macro(), "/targetexact Kobold", "a step restored while the world loads is no change")
+    local broken = fixture({quests = TWO_QUESTS, focus = 1, rxp = {steps = {"step", 5, {index = 1, elements = "none"},
+        rstep(2, {"element", {mobs = "none"}, {mobs = {7, {}}}, {targets = {"Bad;Name"}}, {questId = "x"}})}}})
+    contains(broken.macro(), "/targetexact Boar", "nothing usable: the quest focus")
+    broken.rxp.RXPFrame.activeSteps = "gone"
+    broken.emit("QUEST_LOG_UPDATE")
+    broken.advance()
+    contains(broken.macro(), "/targetexact Boar")
+    broken.rxp.RXPFrame = nil
+    broken.emit("QUEST_LOG_UPDATE")
+    broken.advance()
+    contains(broken.macro(), "/targetexact Boar")
+end)
+
+test("rxp: the setting is greyed out without it, and without its fields; it hooks only what exists", function()
+    local none = fixture({quests = TWO_QUESTS, focus = 1, saved = {rxpFocus = true}})
+    equal(settingRow(none, "DQT_RXP_FOCUS"):Enabled(), false, "no RestedXP")
+    contains(settingRow(none, "DQT_RXP_FOCUS").tooltip, "Needs RestedXP: greyed out")
+    equal(none.env.DyresQuestTargetingDB.rxpFocus, true, "the saved value stays")
+    local noFrame = fixture({quests = TWO_QUESTS, focus = 1, rxp = {noFrame = true}})
+    equal(settingRow(noFrame, "DQT_RXP_FOCUS"):Enabled(), false)
+    local rxp = fixture({quests = TWO_QUESTS, focus = 1, rxp = {}})
+    equal(settingRow(rxp, "DQT_RXP_FOCUS"):Enabled(), true)
+    equal(rxp.dqt.HookRxp(function() end), true)
+    rxp.rxp.targeting.UpdateUnitList = nil
+    equal(rxp.dqt.HookRxp(function() end), false)
+    local macro = {name = "RXPTargeting", icon = 1, body = "/run RXP"}
+    local leftAlone = fixture({quests = TWO_QUESTS, characterMacros = {macro}, rxp = {steps = {rxpStepThree()}}})
+    equal(macro.body, "/run RXP", "RestedXP's own macro is left alone")
+    contains(leftAlone.macro(), "/targetexact Gnoll Runt")
+end)
+
+test("rxp: with Zygor too, Zygor's step wins at login, then the latest new step", function()
+    local state = fixture({quests = TWO_QUESTS, zygor = {step = zstep(3, {zgoal({action = "kill", target = "Zygor Mob"})})},
+        rxp = {steps = {rstep(3, {{mobs = {"RestedXP Mob"}}})}}})
+    contains(state.macro(), "/targetexact Zygor Mob")
+    lacks(state.macro(), "RestedXP Mob")
+    state.rxpSteps({rstep(4, {{mobs = {"New RestedXP Mob"}}})})
+    state.advance()
+    contains(state.macro(), "/targetexact New RestedXP Mob")
+    state.zygorStep(zstep(4, {zgoal({action = "kill", target = "New Zygor Mob"})}))
+    state.advance()
+    contains(state.macro(), "/targetexact New Zygor Mob")
+    local only = fixture({quests = TWO_QUESTS, zygor = {step = zstep(3, {zgoal({action = "goto"})})},
+        rxp = {steps = {rstep(3, {{mobs = {"RestedXP Mob"}}})}}})
+    contains(only.macro(), "/targetexact RestedXP Mob", "Zygor names no one: RestedXP's")
+end)
+
+test("rxp: classic without Questie follows RestedXP's step, with no line about a missing focus", function()
+    local state = fixture({quests = TWO_QUESTS, classic = true, rxp = {steps = {rxpStepThree()}}})
+    equal(state.dqt.available, true)
+    contains(state.macro(), "/targetexact Gnoll Runt")
+    equal(state.said("no quest focus of its own"), false)
+    equal(boxLines(state)[1], "Wolves (RestedXP)")
+end)
+
+test("rxp: TomTom finds IDs through QuestieDB; never at login; no match uses a real quest or stays", function()
+    local function rxpTomTom(steps)
+        return fixture({quests = TWO_QUESTS, db = RXP_DB, questie = {npcs = RXP_SPAWNS}, tomtom = true,
+            saved = {tomtom = true}, rxp = {steps = steps}})
+    end
+    local state = rxpTomTom({rstep(3, {{questId = 2}, {mobs = {"Gnoll Runt"}}})})
+    equal(#state.waypoints, 0, "the step RestedXP restores at login leaves your waypoint alone")
+    state.rxpSteps({rstep(4, {{questId = 2}, {mobs = {"Gnoll Runt", "Timber Wolf"}}})})
+    state.advance()
+    equal(state.waypoints[#state.waypoints], "Timber Wolf 141 30,40", "a dropper of the quest's item, the nearest")
+    state.rxpSteps({rstep(5, {{questId = 2}, {targets = {"Zenn Foulhoof"}}})})
+    state.advance()
+    equal(state.waypoints[#state.waypoints], "Zenn Foulhoof 141 50,60", "who finishes the quest")
+    state.rxpSteps({rstep(6, {{questId = 2}, {targets = {"Tenaron Stormgrip"}}})})
+    state.advance()
+    equal(state.waypoints[#state.waypoints], "Tenaron Stormgrip 141 70,80", "who starts the quest")
+    state.rxpSteps({rstep(7, {{questId = 2}, {mobs = {"Unknown Mob"}}})})
+    state.advance()
+    equal(state.waypoints[#state.waypoints], "quest 2", "no match: a real quest of the step")
+    local count = #state.waypoints
+    state.rxpSteps({rstep(8, {{mobs = {"Other Mob"}}})})
+    state.advance()
+    state.rxpSteps({rstep(9, {{questId = 999}, {mobs = {"Third Mob"}}})})
+    state.advance()
+    equal(#state.waypoints, count, "no quest in your log: the waypoint stays")
+    for _, waypoint in ipairs(state.waypoints) do
+        lacks(waypoint, "rxp", "DQT's key never reaches Questie")
+    end
+end)
+
+local ZYGOR_NPCS = {[40] = {name = "Gnoll Runt", at = {10, 20}, zone = 12, far = 50},
+    [41] = {name = "Murloc Forager", at = {30, 40}, zone = 12, far = 5},
+    [42] = {name = "Zenn Foulhoof", at = {50, 60}, zone = 141, far = 9}}
+
+local function zygorTomTom(options)
+    options.quests = options.quests or TWO_QUESTS
+    options.questie = options.questie or {npcs = ZYGOR_NPCS}
+    options.tomtom, options.saved = true, {tomtom = true}
+    return fixture(options)
+end
+
+local function zkill(name, id, questid)
+    return zgoal({action = "kill", target = name, targetid = id, questid = questid})
+end
+
+test("zygor: TomTom points at the step's mobs and NPCs, and again when they change, not at login", function()
+    local gnolls = zstep(3, {zkill("Gnoll Runt", 40, 2)})
+    local state = zygorTomTom({zygor = {step = gnolls}})
+    equal(#state.waypoints, 0, "the step Zygor restores at login leaves your waypoint alone")
+    state.zygorSend("ZGV_GOAL_PROGRESS", 3, 1)
+    state.advance()
+    equal(#state.waypoints, 0, "progress changes nothing")
+    state.zygorStep(zstep(4, {zkill("Murloc Forager", 41), zkill("Gnoll Runt", 40)}))
+    state.advance()
+    equal(state.waypoints[#state.waypoints], "Murloc Forager 12 30,40", "a new step: its nearest mob")
+    local count = #state.waypoints
+    state.zygor.CurrentStep.goals[1].fakeStatus = "complete"
+    state.zygorSend("ZGV_GOAL_COMPLETED", 4, 1)
+    state.advance()
+    equal(#state.waypoints, count + 1, "the macro's mobs changed")
+    equal(state.waypoints[#state.waypoints], "Gnoll Runt 12 10,20")
+    state.zygorStep(zstep(5, {zgoal({action = "talk", npc = "Zenn Foulhoof", npcid = 42}, "passive")}))
+    state.advance()
+    equal(state.waypoints[#state.waypoints], "Zenn Foulhoof 141 50,60", "an NPC to talk to, too")
+end)
+
+test("zygor: without spawn data, TomTom uses the step's quest in your log, or stays; never DQT's own key", function()
+    local state = zygorTomTom({zygor = {step = zstep(3, {zkill("Gnoll Runt", 40)})}})
+    state.zygorStep(zstep(4, {zkill("Forever Mob", 261306, 2)}))
+    state.advance()
+    equal(state.waypoints[#state.waypoints], "quest 2", "the step's quest, a real ID")
+    local count = #state.waypoints
+    state.zygorStep(zstep(5, {zkill("Forever Mob", 261306, 999), zkill("Other Mob", 261307)}))
+    state.advance()
+    state.zygorStep(zstep(6, {zgoal({action = "kill", target = "No ID Mob"})}))
+    state.advance()
+    equal(#state.waypoints, count, "no quest in your log: the waypoint stays")
+    for _, waypoint in ipairs(state.waypoints) do
+        lacks(waypoint, "zygor", "DQT's key never reaches Questie")
+    end
+end)
+
+test("zygor: a step Zygor restores after login does not point TomTom; a travel step counts as the first", function()
+    local late = zygorTomTom({focus = 1, zygor = {}})
+    equal(#late.waypoints, 0)
+    late.zygorStep(zstep(3, {zkill("Gnoll Runt", 40)}))
+    late.advance()
+    contains(late.macro(), "/targetexact Gnoll Runt", "Zygor's step wins")
+    equal(#late.waypoints, 0, "the restored step, seconds after login")
+    late.zygorStep(zstep(4, {zkill("Murloc Forager", 41)}))
+    late.advance()
+    equal(late.waypoints[#late.waypoints], "Murloc Forager 12 30,40")
+    local travel = zygorTomTom({zygor = {step = zstep(3, {zgoal({action = "goto"})})}})
+    equal(#travel.waypoints, 0)
+    travel.zygorStep(zstep(4, {zkill("Murloc Forager", 41)}))
+    travel.advance()
+    equal(travel.waypoints[#travel.waypoints], "Murloc Forager 12 30,40", "a real step change")
+end)
+
+local function rxpLocationState(options)
+    options.quests = options.quests or TWO_QUESTS
+    options.db = options.db or RXP_DB
+    options.tomtomApi, options.saved = true, options.saved or {tomtom = true}
+    return fixture(options)
+end
+
+-- An element of RestedXP's arrow list: x and y are 0 to 100.
+local function rway(step, x, y, fields)
+    local element = fields or {}
+    element.step, element.zone, element.x, element.y = step, 1438, x, y
+    if element.arrow == nil then
+        element.arrow = true
+    end
+    return element
+end
+
+test("rxp location: the arrow's choice, in RestedXP's order, a low-priority one last", function()
+    local step = rstep(3, {{mobs = {"Gnoll Runt"}}})
+    local state = rxpLocationState({questie = {npcs = RXP_SPAWNS}, rxp = {steps = {step}, waypoints = {rway(step, 10, 20)}}})
+    equal(#state.tomtomPoints, 0, "the step RestedXP restores at login does not point")
+    local nextStep = rstep(4, {{mobs = {"Gnoll Runt"}}})
+    local sticky = rstep(nil, {{text = "sticky"}})
+    state.rxpSteps({sticky, nextStep})
+    state.rxpMap({
+        rway(nextStep, 1, 1, {hidden = true}),
+        rway(nextStep, 2, 2, {skip = true}),
+        rway(nextStep, 3, 3, {parent = {completed = true}}),
+        rway(nextStep, 4, 4, {arrow = false}),
+        rway(nextStep, 5, 5, {text = "done", completed = true}),
+        rway(rstep(9, {}), 6, 6),
+        rway(nextStep, 7, 7, {lowPrio = true}),
+        rway(sticky, 62, 42),
+        rway(nextStep, 50, 60),
+    })
+    state.rxp.activeWaypoints[6].step.active = false
+    state.advance()
+    equal(state.tomtomPoints[#state.tomtomPoints].text, "1438 0.62,0.42", "the first it may take; a sticky step first")
+    equal(#state.waypoints, 0, "not the mob's spawn: the step has a location")
+    state.rxpMap({rway(nextStep, 7, 7, {lowPrio = true})})
+    state.advance()
+    equal(state.tomtomPoints[#state.tomtomPoints].text, "1438 0.07,0.07", "low priority, when no other is left")
+    equal(state.tomtomPoints[#state.tomtomPoints].opts.crazy, true, "the arrow goes there")
+    state.rxpMap({rway(nextStep, 3, 3, {generated = 1, arrow = false})})
+    state.advance()
+    equal(state.tomtomPoints[#state.tomtomPoints].text, "1438 0.03,0.03", "a generated point")
+end)
+
+test("rxp location: a waypoint reached within a step moves the arrow; no change does not", function()
+    local step = rstep(3, {{mobs = {"Gnoll Runt"}}})
+    local state = rxpLocationState({questie = {npcs = RXP_SPAWNS}, rxp = {steps = {step}, waypoints = {rway(step, 10, 20)}}})
+    state.advance()
+    local nextStep = rstep(4, {{mobs = {"Gnoll Runt"}}})
+    local first, second = rway(nextStep, 30, 40), rway(nextStep, 50, 60)
+    state.rxpSteps({nextStep})
+    state.rxpMap({first, second})
+    state.advance()
+    equal(#state.tomtomPoints, 1)
+    equal(state.tomtomPoints[1].text, "1438 0.3,0.4")
+    state.rxp.activeWaypoints = {second}
+    state.rxp.UpdateMap()
+    state.advance()
+    equal(#state.tomtomPoints, 1, "UpdateMap() only sets RestedXP's flag: no rebuild yet")
+    first.skip = true
+    state.rxpMap({second})
+    state.advance()
+    equal(#state.tomtomPoints, 2, "the signal alone moves it")
+    equal(state.tomtomPoints[2].text, "1438 0.5,0.6")
+    equal(state.tomtomRemoved[1], state.tomtomPoints[1], "the earlier waypoint goes")
+    equal(state.env.Questie.db.char._tom_waypoint, state.tomtomPoints[2], "Questie's next waypoint replaces this one")
+    state.rxpMap({second})
+    state.advance()
+    equal(#state.tomtomPoints, 2, "the same location is not set again")
+end)
+
+test("rxp location: appearing after login is not a change; a step that names no one points; old path without one", function()
+    local step = rstep(3, {{mobs = {"Gnoll Runt"}}})
+    local late = rxpLocationState({questie = {npcs = RXP_SPAWNS}, focus = 1, rxp = {steps = {step}, waypoints = {}}})
+    late.advance()
+    late.rxpMap({rway(step, 10, 20)})
+    late.advance()
+    equal(#late.tomtomPoints, 0, "RestedXP's list fills a moment after login")
+    equal(#late.waypoints, 0)
+
+    local travel = rstep(4, {{text = "Go north"}})
+    late.rxpSteps({travel})
+    late.rxpMap({rway(travel, 70, 80)})
+    late.advance()
+    equal(late.tomtomPoints[#late.tomtomPoints].text, "1438 0.7,0.8", "the guide is the latest focus")
+    contains(late.macro(), "/targetexact Boar", "the macro follows the quest focus")
+    lacks(late.macro(), "Go north")
+
+    local noWay = rstep(5, {{mobs = {"Gnoll Runt", "Timber Wolf"}}, {questId = 2}})
+    local count = #late.tomtomPoints
+    late.rxpSteps({noWay})
+    late.rxpMap({})
+    late.advance()
+    equal(#late.tomtomPoints, count, "no location")
+    equal(late.waypoints[#late.waypoints], "Timber Wolf 141 30,40", "today's path: the nearest spawn")
+end)
+
+test("rxp location: without Questie it still points, unsaved; the switch and TomTom's calls gate it", function()
+    local step = rstep(3, {{mobs = {"Gnoll Runt"}}})
+    local state = rxpLocationState({rxp = {steps = {step}, waypoints = {rway(step, 10, 20)}}})
+    state.advance()
+    local nextStep = rstep(4, {{mobs = {"Gnoll Runt"}}})
+    state.rxpSteps({nextStep})
+    state.rxpMap({rway(nextStep, 30, 40)})
+    state.advance()
+    equal(state.tomtomPoints[1].text, "1438 0.3,0.4")
+    equal(state.tomtomPoints[1].opts.persistent, false, "nothing would remove it after a /reload")
+    local thirdStep = rstep(5, {{mobs = {"Gnoll Runt"}}})
+    state.rxpSteps({thirdStep})
+    state.rxpMap({rway(thirdStep, 50, 60)})
+    state.advance()
+    equal(state.tomtomRemoved[1], state.tomtomPoints[1], "DQT removes its own")
+
+    local off = rxpLocationState({saved = {tomtom = false}, rxp = {steps = {step}, waypoints = {}}})
+    off.advance()
+    off.rxpSteps({nextStep})
+    off.rxpMap({rway(nextStep, 30, 40)})
+    off.advance()
+    equal(#off.tomtomPoints, 0, "the setting is off")
+    equal(off.mapUpdates, 1)
+
+    local notFollowed = rxpLocationState({saved = {tomtom = true, rxpFocus = false}, focus = 1,
+        rxp = {steps = {step}, waypoints = {}}})
+    notFollowed.advance()
+    notFollowed.rxpSteps({nextStep})
+    notFollowed.rxpMap({rway(nextStep, 30, 40)})
+    notFollowed.advance()
+    equal(#notFollowed.tomtomPoints, 0, "RestedXP is not followed")
+
+    local oldTomTom = fixture({quests = TWO_QUESTS, db = RXP_DB, questie = {npcs = RXP_SPAWNS}, tomtom = true,
+        saved = {tomtom = true}, rxp = {steps = {step}, waypoints = {rway(step, 10, 20)}}})
+    oldTomTom.advance()
+    local killStep = rstep(6, {{questId = 2}, {mobs = {"Gnoll Runt"}}})
+    oldTomTom.rxpSteps({killStep})
+    oldTomTom.rxpMap({rway(killStep, 30, 40)})
+    oldTomTom.advance()
+    equal(oldTomTom.waypoints[#oldTomTom.waypoints], "Gnoll Runt 141 10,20", "no AddWaypoint: the old path")
+    local noQuest = fixture({quests = TWO_QUESTS, questie = {npcs = RXP_SPAWNS}, tomtom = true, saved = {tomtom = true},
+        rxp = {steps = {step}, waypoints = {rway(step, 10, 20)}}})
+    noQuest.advance()
+    local travelStep = rstep(7, {{text = "Go north"}})
+    noQuest.rxpSteps({travelStep})
+    noQuest.rxpMap({rway(travelStep, 30, 40)})
+    noQuest.advance()
+    equal(#noQuest.waypoints, 0, "no AddWaypoint and no focused quest: nothing to do, and no error")
+end)
+
+test("rxp location: a quest focus chosen after the step takes the arrow back", function()
+    local step = rstep(3, {{mobs = {"Gnoll Runt"}}})
+    local state = rxpLocationState({questie = {npcs = RXP_SPAWNS}, focus = 1,
+        rxp = {steps = {step}, waypoints = {rway(step, 10, 20)}}})
+    state.advance()
+    local nextStep = rstep(4, {{mobs = {"Gnoll Runt"}}})
+    state.rxpSteps({nextStep})
+    state.rxpMap({rway(nextStep, 30, 40)})
+    state.advance()
+    equal(#state.tomtomPoints, 1)
+    local before = #state.waypoints
+    state.questieUtils:FocusQuest(2)
+    state.advance()
+    equal(#state.tomtomPoints, 1, "not the step's location")
+    equal(#state.waypoints, before + 1, "the quest's own path, unchanged")
+end)
+
+local function zway(x, y, fields)
+    local goal = zgoal(fields or {})
+    goal.action, goal.map, goal.x, goal.y = goal.action or "goto", 1429, x, y
+    return goal
+end
+
+test("zygor location: the current waypoint goal, or the next it can point at; not sticky steps", function()
+    local state = fixture({quests = TWO_QUESTS, questie = {npcs = ZYGOR_NPCS}, tomtomApi = true, saved = {tomtom = true},
+        zygor = {step = zstep(3, {zway(0.1, 0.2)})}})
+    equal(#state.tomtomPoints, 0, "not the step Zygor restores at login")
+    state.advance()
+    local hidden = zway(0.3, 0.3)
+    function hidden:IsVisible() return false end
+    state.zygorStep(zstep(4, {
+        hidden,
+        zway(0.4, 0.4, {force_noway = true}),
+        zway(0.5, 0.5, {action = "mapmarker"}),
+        zgoal({action = "kill", target = "Gnoll Runt", targetid = 40}),
+        zway(0.6, 0.7),
+        zway(0.8, 0.9),
+    }))
+    state.advance()
+    equal(state.tomtomPoints[#state.tomtomPoints].text, "1429 0.6,0.7", "the first it can point at")
+    equal(#state.waypoints, 0, "not the mob's spawn")
+    local count = #state.tomtomPoints
+    local step = zstep(5, {zway(0.11, 0.12), zway(0.13, 0.14)})
+    step.current_waypoint_goal_num = 2
+    state.zygorStep(step)
+    state.advance()
+    equal(#state.tomtomPoints, count + 1)
+    equal(state.tomtomPoints[#state.tomtomPoints].text, "1429 0.13,0.14", "Zygor's current waypoint goal")
+    step.current_waypoint_goal_num = 1
+    state.zygorSend("ZGV_STEP_WAYPOINT_CHANGED", step, 1)
+    state.advance()
+    equal(state.tomtomPoints[#state.tomtomPoints].text, "1429 0.11,0.12", "its own message moves the arrow")
+    equal(state.tomtomRemoved[#state.tomtomRemoved], state.tomtomPoints[#state.tomtomPoints - 1], "the earlier one goes")
+    local sticky = zstep(90, {zway(0.5, 0.5)})
+    state.env.ZygorGuidesViewer.CurrentStickies = {sticky}
+    count = #state.tomtomPoints
+    state.zygorSend("ZGV_GOAL_PROGRESS", 5, 1)
+    state.advance()
+    equal(#state.tomtomPoints, count, "a sticky step does not take Zygor's arrow, nor this one")
+end)
+
+test("zygor location: without one, today's path; bad fields count as none; a quest focus takes it back", function()
+    local state = fixture({quests = TWO_QUESTS, questie = {npcs = ZYGOR_NPCS}, tomtomApi = true, saved = {tomtom = true},
+        zygor = {step = zstep(3, {zway(0.1, 0.2)})}})
+    state.advance()
+    state.zygorStep(zstep(4, {zkill("Murloc Forager", 41)}))
+    state.advance()
+    equal(state.waypoints[#state.waypoints], "Murloc Forager 12 30,40", "no location")
+    equal(#state.tomtomPoints, 0)
+    local stringMap = zway(0.2, 0.2)
+    stringMap.map = "Elwynn Forest"
+    state.zygorStep(zstep(5, {stringMap, zkill("Gnoll Runt", 40)}))
+    state.advance()
+    equal(#state.tomtomPoints, 0, "a map that is no number")
+    equal(state.waypoints[#state.waypoints], "Gnoll Runt 12 10,20")
+    state.zygorStep(zstep(6, {zway(0.3, 0.4)}))
+    state.advance()
+    equal(state.tomtomPoints[#state.tomtomPoints].text, "1429 0.3,0.4", "a travel step that names no one")
+    local count, before = #state.tomtomPoints, #state.waypoints
+    state.questieUtils:FocusQuest(1)
+    state.advance()
+    equal(#state.tomtomPoints, count, "Questie's focus changed last")
+    equal(#state.waypoints, before + 1)
+end)
+
+test("zygor: TomTom needs its switch, TomTom, and Questie", function()
+    local off = fixture({quests = TWO_QUESTS, questie = {npcs = ZYGOR_NPCS}, tomtom = true,
+        zygor = {step = zstep(3, {zkill("Gnoll Runt", 40)})}})
+    off.zygorStep(zstep(4, {zkill("Murloc Forager", 41)}))
+    off.advance()
+    equal(#off.waypoints, 0, "off by default")
+    off.settings.DQT_TOMTOM:SetValue(true)
+    equal(off.waypoints[#off.waypoints], "Murloc Forager 12 30,40", "turning it on points now")
+    local none = fixture({quests = TWO_QUESTS, questie = {npcs = ZYGOR_NPCS}, saved = {tomtom = true},
+        zygor = {step = zstep(3, {zkill("Gnoll Runt", 40)})}})
+    none.zygorStep(zstep(4, {zkill("Murloc Forager", 41)}))
+    none.advance()
+    equal(#none.waypoints, 0, "no TomTom")
+    local bare = fixture({quests = TWO_QUESTS, tomtom = true, saved = {tomtom = true},
+        zygor = {step = zstep(3, {zkill("Gnoll Runt", 40)})}})
+    bare.zygorStep(zstep(4, {zkill("Murloc Forager", 41)}))
+    bare.advance()
+    contains(bare.macro(), "/targetexact Murloc Forager", "no Questie: the macro still follows")
 end)
 
 local failed = 0

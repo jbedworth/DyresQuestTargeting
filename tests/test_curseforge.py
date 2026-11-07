@@ -158,6 +158,8 @@ class CurseForgeTests(unittest.TestCase):
                                                                "type": "optionalDependency"},
                                                               {"slug": "tomtom", "projectID": 18808,
                                                                "type": "optionalDependency"},
+                                                              {"slug": "questiedb", "projectID": 1696795,
+                                                               "type": "requiredDependency"},
                                                               {"slug": "dyres-toolkit",
                                                                "type": "requiredDependency"}]}})
         self.assertEqual(parts[1].get_filename(), self.archive.name)
@@ -193,13 +195,14 @@ class CurseForgeTests(unittest.TestCase):
                     self.publish()
                 self.assert_no_network()
 
-    def test_questie_and_tomtom_are_optional_and_the_toolkit_required(self):
-        # A required Questie or TomTom would make CurseForge install it for every player.
+    def test_questie_and_tomtom_optional_questiedb_and_toolkit_required(self):
+        # A required Questie or TomTom would make CurseForge install it for every player;
+        # QuestieDB and the toolkit are required, so the app installs them with DQT.
         types = {p["slug"]: p["type"] for p in publisher.RELATIONS["projects"]}
         self.assertEqual(types, {"questie": "optionalDependency", "tomtom": "optionalDependency",
-                                 "dyres-toolkit": "requiredDependency"})
+                                 "questiedb": "requiredDependency", "dyres-toolkit": "requiredDependency"})
         ids = {p["slug"]: p.get("projectID") for p in publisher.RELATIONS["projects"]}
-        self.assertEqual((ids["questie"], ids["tomtom"]), (334372, 18808))
+        self.assertEqual((ids["questie"], ids["tomtom"], ids["questiedb"]), (334372, 18808, 1696795))
 
     def test_strict_tag(self):
         for tag in ("0.1.0-beta", "v0.1.0", "vv0.1.0-beta", "v0.1.0-beta\n", "v../bad"):

@@ -124,7 +124,9 @@ end
 -- Functions other runtime files must define. A mixed install of old and new
 -- files otherwise fails silently, because the client hides Lua errors by default.
 local REQUIRED_NAMESPACE = {"ParseCommand", "HandleCommand", "FocusedQuest", "GameFocusChanged", "WorldLoading",
-    "WorldEntered", "HookQuestieFocus", "QuestieFocusAvailable", "SyncFocus", "PointTomTom",
+    "WorldEntered", "HookQuestieFocus", "QuestieFocusAvailable", "HookZygor", "ZygorAvailable", "HookRxp", "RxpAvailable",
+    "SyncFocus",
+    "PointTomTom",
     "ReportQuestDebug", "BuildMacro",
     "WriteMacro", "FlushMacro", "ReportMacroDebug", "CreateBox", "UpdateBox", "InitializeOptions", "OpenSettings"}
 -- Client APIs the macro needs; checked, never the client version. An entry
@@ -161,9 +163,17 @@ function DQT.HasGameFocus()
     return API("C_SuperTrack", "GetSuperTrackedQuestID")
 end
 
--- A quest focus to follow: the game's, or Questie's tracker focus.
+-- Something to follow: the game's focus, Questie's tracker focus, or a guide.
 function DQT.CanFollowQuests()
-    return DQT.HasGameFocus() or DQT.QuestieFocusAvailable()
+    return DQT.HasGameFocus() or DQT.QuestieFocusAvailable() or DQT.ZygorAvailable() or DQT.RxpAvailable()
+end
+
+-- How a focus is named in chat and the box: its own name, else the game's focus.
+function DQT.ViaName(quest, gameName)
+    if quest.via == "game" then
+        return gameName
+    end
+    return quest.via
 end
 
 -- The quest log, through C_QuestLog where the client has it, else the older
@@ -292,6 +302,12 @@ function DQT.SanitizeDB(db)
     if type(db.questieFocus) ~= "boolean" then
         db.questieFocus = true
     end
+    if type(db.zygorFocus) ~= "boolean" then
+        db.zygorFocus = true
+    end
+    if type(db.rxpFocus) ~= "boolean" then
+        db.rxpFocus = true
+    end
     -- Both change other AddOns' state, so they are opt-in.
     if type(db.syncFocus) ~= "boolean" then
         db.syncFocus = false
@@ -353,7 +369,7 @@ local lastQuestNames = {}
 local function QuestNames(quest)
     local names = {}
     for _, target in ipairs(quest and quest.targets or {}) do
-        if target.source ~= "turnin" then
+        if target.source ~= "turnin" and target.source ~= "talk" then
             names[target.name:lower()] = target.name
         end
     end
@@ -407,7 +423,7 @@ local function Announce(quest, built)
         end
     end
     local targeting = questFirst and ("targeting updated to " .. questFirst.name) or "targeting nothing from the quest"
-    local via = quest.via == "Questie" and "Questie" or "Quest Focus"
+    local via = DQT.ViaName(quest, "Quest Focus")
     DQT.Report("Focused quest changed via " .. via .. " (" .. quest.title .. "), " .. targeting .. wait .. "."
         .. (listFirst and (" Your hit list comes first: " .. listFirst.name .. ".") or ""))
 end
@@ -576,6 +592,7 @@ local SOURCE_TEXT = {
     kill = "kill objective",
     drop = "drops a quest item",
     turnin = "turn-in",
+    talk = "talk to",
     added = "hit list",
 }
 
@@ -605,6 +622,9 @@ function DQT.ListTargets()
     if quest then
         local where = quest.via == "Questie" and " (Questie's focus" .. (quest.objective
             and (", objective " .. quest.objective) or "") .. ")" or ""
+        if quest.stepText then
+            where = " (" .. quest.via .. "'s " .. quest.stepText .. ")"
+        end
         DQT.Report("Focused quest: " .. quest.title .. where .. (quest.complete and " (ready to turn in)" or ""))
     else
         DQT.Report(DQT.CanFollowQuests() and "No focused quest. Focus one in the quest log, on the map, or in "
@@ -734,5 +754,7 @@ events:SetScript("OnEvent", function(self, event, firstArg)
     self:RegisterEvent("PLAYER_LEAVING_WORLD")
     DQT.WorldLoading()
     DQT.HookQuestieFocus(DQT.RequestRefresh)
+    DQT.HookZygor(DQT.RequestRefresh)
+    DQT.HookRxp(DQT.RequestRefresh)
     DQT.RequestRefresh()
 end)

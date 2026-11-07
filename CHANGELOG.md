@@ -3,6 +3,20 @@
 Player-facing changes for each Dyre's Quest Targeting release, newest first. The
 release builder puts the matching section at the top of each release's notes.
 
+## 1.3.0
+
+### Features
+
+- With Zygor Guides Viewer: the macro can target the mobs and NPCs of the guide step Zygor shows, for every quest of the step and of the sticky steps shown with it. "Follow Zygor's current step" in the settings, on by default, greyed out without Zygor. The focus you change last wins: Zygor's new step, Questie's tracker focus, or the game's. A travel or text step leaves your quest focus in charge. The box header and `/dqt list` say "(Zygor)". Experimental: it reads Zygor's own data, not a public API, so a Zygor update can stop it; the macro keeps working.
+- With RestedXP: the same for the names on its current and sticky steps. "Follow RestedXP's current step" in the settings, on by default, greyed out without RestedXP. RestedXP's own macro and arrow are left alone. Experimental: it reads RestedXP's own data, not a public API, so a RestedXP update can stop it; the macro keeps working.
+- The settings for other AddOns (Questie, Zygor, RestedXP, TomTom) are now together under one heading, "Integrations (Experimental)", which was "Questie Synchronization". Your choices stay as they are.
+- "Point TomTom at the focused quest" also follows Zygor's and RestedXP's steps: when the step has a location, the arrow goes there and moves on with the guide's next waypoint. Otherwise, with Questie, it goes to the nearest of the step's mobs and NPCs. It does not move at login. With a guide, this setting no longer needs Questie for a step's location.
+
+### Other changes
+
+- QuestieDB is now its own CurseForge project, and the CurseForge app installs it with DQT, as it does Dyre's Toolkit.
+- DQT now loads also when Dyre's Toolkit is missing, and says once in chat to install it; without it, the macro works but there is no Quest Target box.
+
 ## 1.2.0
 
 ### Features

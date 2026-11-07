@@ -23,13 +23,16 @@ local category, layout
 -- SpellInfo.castTime is in milliseconds, 0 for instant. Checked per rank, as
 -- "Name(Rank N)": a low rank often casts faster than the top one.
 local MAX_OPENER_CAST_MS = 1000
--- Shown in both Questie settings' tooltips, under their own section heading.
+-- Shown in the Questie sync and TomTom tooltips. The Questie, Zygor, and
+-- TomTom settings share one section heading.
 local EXPERIMENTAL = " Experimental: it uses Questie's own code, not a public API. Use with caution."
-local QUESTIE_HEADING = "Questie Synchronization (Experimental)"
+local INTEGRATIONS_HEADING = "Integrations (Experimental)"
 local NEEDS_QUESTIE = " Needs Questie: greyed out until it is installed and on."
 local NO_GAME_FOCUS = " This client has no quest focus of its own, so DQT always follows Questie's."
 local NO_GAME_SYNC = " This client has no quest focus of its own, so there is nothing to sync."
-local NEEDS_QUESTIE_TOMTOM = " Needs Questie and TomTom: greyed out until both are installed and on."
+local NEEDS_QUESTIE_TOMTOM = " Needs TomTom, with Questie, Zygor, or RestedXP: greyed out until they are installed and on."
+local NEEDS_ZYGOR = " Needs Zygor Guides Viewer: greyed out until it is installed and on."
+local NEEDS_RXP = " Needs RestedXP: greyed out until it is installed and on."
 local BOX_HEADING = "Quest Target Box"
 
 -- Harmful and fast enough to open with. Without the spell APIs, every spell
@@ -218,8 +221,16 @@ local function CanChooseQuestieFocus()
     return QuestieLoaded() and DQT.HasGameFocus()
 end
 
+local function ZygorLoaded()
+    return DQT.ZygorAvailable()
+end
+
+local function RxpLoaded()
+    return DQT.RxpAvailable()
+end
+
 local function QuestieAndTomTomLoaded()
-    return QuestieLoaded() and type(TomTom) == "table"
+    return type(TomTom) == "table" and (QuestieLoaded() or DQT.ZygorAvailable() or DQT.RxpAvailable())
 end
 
 local function Needs(initializer, loaded)
@@ -230,7 +241,8 @@ local function Needs(initializer, loaded)
 end
 
 -- A section heading, as Blizzard's Controls page adds them
--- (Blizzard_SettingControls.lua); without it the names still say what they are.
+-- (Blizzard_SettingControls.lua). Forever and Classic Era have it; the check
+-- is only a safety check and changes no setting name.
 local function Heading(text)
     if type(CreateSettingsListSectionHeaderInitializer) == "function" and type(layout) == "table"
             and type(layout.AddInitializer) == "function" then
@@ -253,16 +265,6 @@ function DQT.InitializeOptions()
     Flag("DQT_ENABLED", "Keep the macro up to date", "enabled", true,
         "Rewrite the macro \"" .. DQT.MACRO_NAME .. "\" with the mobs and NPCs your focused quest "
             .. "needs, out of combat. Off leaves the macro as it is. /dqt on and /dqt off do the same.")
-    local questieFocus = Proxy("DQT_QUESTIE_FOCUS", Settings.VarType.Boolean, "Follow Questie's tracker focus", true,
-        function() return DQT.db.questieFocus or not DQT.HasGameFocus() end,
-        function(value)
-            DQT.db.questieFocus = value == true
-            DQT.Refresh()
-        end)
-    Needs(Settings.CreateCheckbox(category, questieFocus,
-        "With Questie installed, also follow the quest (or objective) you focus in Questie's tracker; "
-            .. "whichever focus you set last wins. Off: only the game's quest log and map focus count."
-            .. (DQT.HasGameFocus() and NEEDS_QUESTIE or NO_GAME_FOCUS)), CanChooseQuestieFocus)
     Flag("DQT_MARK", "Mark what the macro finds", "mark", true,
         "Put a raid marker on the mob or NPC the macro finds, so it is easy to spot.")
     Marker("DQT_MOB_MARKER", "Marker for mobs", "mobMarker", DQT.DEFAULT_MOB_MARKER,
@@ -288,14 +290,37 @@ function DQT.InitializeOptions()
             .. "account-wide macro, for when character slots run short; DQT rewrites it for whichever character "
             .. "is logged in. Not for playing two characters at once: they would rewrite it in turn. After "
             .. "switching, put the new macro on your bars and delete the old one.")
-    -- Without headings, the names still say experimental.
-    Heading(QUESTIE_HEADING)
-    Needs(Flag("DQT_SYNC_FOCUS", "Keep Questie's and the game's focus in sync (experimental)", "syncFocus", false,
+    -- Every integration with another AddOn, under one heading that says
+    -- "(Experimental)" (author, 1.3.0); the names do not.
+    Heading(INTEGRATIONS_HEADING)
+    local questieFocus = Proxy("DQT_QUESTIE_FOCUS", Settings.VarType.Boolean, "Follow Questie's tracker focus", true,
+        function() return DQT.db.questieFocus or not DQT.HasGameFocus() end,
+        function(value)
+            DQT.db.questieFocus = value == true
+            DQT.Refresh()
+        end)
+    Needs(Settings.CreateCheckbox(category, questieFocus,
+        "With Questie installed, also follow the quest (or objective) you focus in Questie's tracker; "
+            .. "whichever focus you set last wins. Off: only the game's quest log and map focus count."
+            .. (DQT.HasGameFocus() and NEEDS_QUESTIE or NO_GAME_FOCUS)), CanChooseQuestieFocus)
+    Needs(Flag("DQT_ZYGOR_FOCUS", "Follow Zygor's current step", "zygorFocus", true,
+        "With Zygor Guides Viewer installed, also target the mobs and NPCs of the guide step Zygor shows, "
+            .. "for every quest of the step, and of the sticky steps shown with it. Whichever focus changed last "
+            .. "wins; a new step counts as a change. A step that names no one (travel or text) leaves the quest "
+            .. "focus in charge. Experimental: it reads Zygor's own data, not a public API. Use with caution."
+            .. NEEDS_ZYGOR), ZygorLoaded)
+    Needs(Flag("DQT_RXP_FOCUS", "Follow RestedXP's current step", "rxpFocus", true,
+        "With RestedXP installed, also target the mobs and NPCs RestedXP names on its current step and "
+            .. "sticky steps. Whichever focus changed last wins; a new step counts as a change. A step that names "
+            .. "no one leaves the quest focus in charge. RestedXP's own targeting macro is left alone. "
+            .. "Experimental: it reads RestedXP's own data, not a public API. Use with caution."
+            .. NEEDS_RXP), RxpLoaded)
+    Needs(Flag("DQT_SYNC_FOCUS", "Keep Questie's and the game's focus in sync", "syncFocus", false,
         "With Questie installed: focusing a quest in Questie's tracker also focuses it in the game's quest "
             .. "log and map, and the other way round. A Questie objective focus gives the game its quest. "
             .. "Needs \"Follow Questie's tracker focus\"." .. EXPERIMENTAL
             .. (DQT.HasGameFocus() and NEEDS_QUESTIE or NO_GAME_SYNC)), CanChooseQuestieFocus)
-    local tomtom = Proxy("DQT_TOMTOM", Settings.VarType.Boolean, "Point TomTom at the focused quest (experimental)", false,
+    local tomtom = Proxy("DQT_TOMTOM", Settings.VarType.Boolean, "Point TomTom at the focused quest", false,
         function() return DQT.db.tomtom end,
         function(value)
             DQT.db.tomtom = value == true
@@ -305,9 +330,10 @@ function DQT.InitializeOptions()
             end
         end)
     Needs(Settings.CreateCheckbox(category, tomtom,
-        "With Questie and TomTom installed: points the TomTom arrow at the nearest of the quest mobs "
-            .. "the macro looks for (the best droppers, for a quest item), or at the turn-in once the quest is "
-            .. "done. It moves when the focused quest or objective changes, an objective is done, or the quest "
+        "Points the TomTom arrow at the location of Zygor's or RestedXP's current step, when you follow one and "
+            .. "it has a location. Otherwise, with Questie, at the nearest of the quest mobs the macro looks for "
+            .. "(the best droppers, for a quest item), or at the turn-in once the quest is done. It moves when the "
+            .. "step, its waypoint, the focused quest or objective changes, an objective is done, or the quest "
             .. "is ready to turn in." .. EXPERIMENTAL .. NEEDS_QUESTIE_TOMTOM), QuestieAndTomTomLoaded)
     Heading(BOX_HEADING)
     Flag("DQT_SHOW_BOX", "Show the Quest Target Box", "showBox", true,
