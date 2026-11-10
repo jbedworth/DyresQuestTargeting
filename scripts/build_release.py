@@ -254,9 +254,12 @@ def _release_notes(version, changes):
   Interface {INTERFACE}. DQT runs on later beta builds while the client provides
   the APIs it needs, and says so in chat if they are missing.
 - Keeps the character macro "! Target (DQT)" up to date with the mobs and NPCs
-  your focused quest needs, and marks what it finds.
+  your focused quest or guide step (Zygor, RestedXP) needs, and marks what it
+  finds.
 - With QuestieDB installed, it also targets the mobs that drop quest items and
   the NPC you turn the quest in to.
+- With TomTom, it can point the arrow at the guide step's location, or at the
+  nearest mob or NPC the macro looks for.
 - `/dqt add <name>` and `/dqt add_exact <name>` add your own targets; settings
   in Options > AddOns, or `/dqt`; `/dqt list` shows what the macro targets.
 '''
