@@ -34,6 +34,7 @@ class ProvenanceTests(unittest.TestCase):
         )
         for name in build_release.RUNTIME_FILES:
             (source / name).write_text("local value = true\n", encoding="utf-8", newline="\n")
+        (source / build_release.BINDINGS_FILE).write_text("<Bindings>\n</Bindings>\n", encoding="utf-8", newline="\n")
         (source / "LICENSE").write_text(build_release.MIT_NOTICE + "\n", encoding="utf-8", newline="\n")
         (source / build_release.CHANGELOG_NAME).write_text(
             "## 1.2.3-beta\n\n- Test change.\n", encoding="utf-8", newline="\n")

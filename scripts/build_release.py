@@ -21,7 +21,9 @@ from pathlib import Path
 
 ADDON = "DyresQuestTargeting"
 RUNTIME_FILES = ("Commands.lua", "Core.lua", "Quest.lua", "Macro.lua", "Box.lua", "Options.lua")
-TEXT_FILES = (ADDON + ".toc",) + RUNTIME_FILES + ("LICENSE",)
+# Bindings.xml is not in the TOC: the game reads it by name from the AddOn folder.
+BINDINGS_FILE = "Bindings.xml"
+TEXT_FILES = (ADDON + ".toc",) + RUNTIME_FILES + (BINDINGS_FILE, "LICENSE")
 PACKAGE_FILES = TEXT_FILES
 # Release metadata: the TOC Interface, CurseForge game version, and the build last
 # targeted. The runtime itself detects features, not builds.
@@ -123,6 +125,9 @@ def _validate_files(files, expected_version=None):
         raise ValueError("Archive version does not match expected version")
     if loads != list(RUNTIME_FILES):
         raise ValueError("TOC must load " + ", ".join(RUNTIME_FILES) + " in that exact order")
+    bindings = texts[BINDINGS_FILE].strip()
+    if not (bindings.startswith("<Bindings>") and bindings.endswith("</Bindings>")):
+        raise ValueError(f"{BINDINGS_FILE} must be one <Bindings> element")
     if " ".join(texts["LICENSE"].split()) != " ".join(MIT_NOTICE.split()):
         raise ValueError("LICENSE must preserve the MIT terms and 2026 John Bedworth notice")
     # Category and icon are preserved byte-for-byte; they are not client support gates.
@@ -254,7 +259,7 @@ def _release_notes(version, changes):
   Interface {INTERFACE}. DQT runs on later beta builds while the client provides
   the APIs it needs, and says so in chat if they are missing.
 - Keeps the character macro "! Target (DQT)" up to date with the mobs and NPCs
-  your focused quest or guide step (Zygor, RestedXP) needs, and marks what it
+  your focused quest or guide step (Zygor, RestedXP, QuestTrail) needs, and marks what it
   finds.
 - With QuestieDB installed, it also targets the mobs that drop quest items and
   the NPC you turn the quest in to.

@@ -16,7 +16,7 @@ tested.
 | Author shown | Dyre, set through the CurseForge account's username |
 | License | MIT License |
 | Logo | artwork/dyres-quest-targeting-logo.png (1024 x 1024); artwork/dyres-quest-targeting-logo-512.png if a smaller square is wanted |
-| Relations | QuestieDB (CurseForge project 1696795, slug `questiedb`, by Lawgon) and Dyre's Toolkit (slug `dyres-toolkit`), required dependencies; Questie (project 334372) and TomTom (project 18808), optional dependencies. CI uploads set all four; add them by hand on any file uploaded through the website. Zygor Guides Viewer and RestedXP are not relations: they are separate products, and DQT does not install them. |
+| Relations | QuestieDB (CurseForge project 1696795, slug `questiedb`, by Lawgon) and Dyre's Toolkit (slug `dyres-toolkit`), required dependencies; Questie (project 334372) and TomTom (project 18808), optional dependencies. CI uploads set all four; add them by hand on any file uploaded through the website. Zygor Guides Viewer, RestedXP, and QuestTrail are not relations: they are separate AddOns, and DQT does not install them. |
 | Screenshots | artwork/screenshots/, the PNG files; see Screenshots below |
 | Source | https://github.com/jbedworth/DyresQuestTargeting |
 | Issues | https://github.com/jbedworth/DyresQuestTargeting/issues |
@@ -83,12 +83,20 @@ A small box shows your focused quest, what the macro looks for (with drop rates)
 ### Per character
 Each character has its own macro and its own hit list. Short of character macro slots? A setting uses one account-wide macro instead.
 
-### Works with Questie, TomTom, Zygor, and RestedXP
-All four are optional, and their settings are together under "Integrations (Experimental)". A setting whose AddOn is missing is greyed out. Use these with caution: they use the other AddOns' own code or data, not a public API.
+### With QuestTrail
+QuestTrail's compass plans your route. DQT targets the step it points at: that objective's mobs, the turn-in NPC, or who gives the quest. It also targets the "on the way" objectives, the camps the route walks through, so you no longer add them to the hit list by hand.
+- A new step updates the macro by itself. The box header and `/dqt list` say "(QuestTrail)".
+- The focus you change last wins. QuestTrail setting the game's focus to its step's quest does not count.
+- With TomTom, TomTom's arrow goes where QuestTrail's compass goes, and QuestTrail's compass keeps its plan.
+- QuestTrail is a separate AddOn. DQT does not install it, and the setting is greyed out without it.
+- Experimental, to be used with caution: DQT reads QuestTrail's own data, not a public API, so a QuestTrail update can stop it. DQT then follows your quest focus, and the macro keeps working.
+
+### Works with Questie, TomTom, Zygor, RestedXP, and QuestTrail
+All five are optional, and their settings are together under "Integrations (Experimental)". A setting whose AddOn is missing is greyed out. Use these with caution: they use the other AddOns' own code or data, not a public API.
 - Follow Questie's tracker focus (on by default): DQT follows the quest you focus in the game's quest log or map, or in Questie's tracker, whichever you set last. Chat says when the focused quest changes. Without Questie it still targets kill objectives and your hit list.
-- Follow Zygor's current step and Follow RestedXP's current step (on by default): see above.
+- Follow Zygor's current step, Follow RestedXP's current step, and Follow QuestTrail's current step (on by default): see above.
 - Keep Questie's and the game's focus in sync (off by default).
-- Point TomTom at the focused quest (off by default; needs TomTom, with Questie, Zygor, or RestedXP): on a Zygor or RestedXP step with a location, points the TomTom arrow there and moves on with the guide's next waypoint. Otherwise, with Questie, it points at the nearest of the mobs and NPCs the macro looks for, or at the turn-in once the quest is done.
+- Point TomTom at the focused quest (off by default; needs TomTom, with Questie, Zygor, RestedXP, or QuestTrail): on a Zygor, RestedXP, or QuestTrail step with a location, points the TomTom arrow there and moves on with the guide's next waypoint. Otherwise, with Questie, it points at the nearest of the mobs and NPCs the macro looks for, or at the turn-in once the quest is done.
 
 ### Dyre's Toolkit
 The Quest Target Box needs Dyre's Toolkit; the CurseForge app installs it with DQT. Without it, the macro still works, and chat says once what to install. It gives all Dyre's AddOns one settings home, one way to move their frames, and a minimap menu.
@@ -97,6 +105,7 @@ The Quest Target Box needs Dyre's Toolkit; the CurseForge app installs it with D
 - `/dqt` opens the settings.
 - `/dqt list` lists what the macro targets, most wanted first, and why.
 - `/dqt add [name]`, `/dqt add_exact [name]`, `/dqt remove [name]`, `/dqt reset` (clears the hit list).
+- Key bindings: add your target to the hit list, add it with its exact name, or remove it.
 - `/dqt on`, `/dqt off`: turn updating the macro on or off.
 - `/dqt unlock`, `/dqt lock`: move the Quest Target Box (all Dyre's AddOns' frames, as `/dyre unlock` does); `/dqt reset_box` puts it back.
 - `/questtargeting` works the same, in case another AddOn uses `/dqt`.

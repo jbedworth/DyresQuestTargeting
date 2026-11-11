@@ -102,6 +102,12 @@ front of you.
 
 `/questtargeting` works the same, in case another AddOn uses `/dqt`.
 
+Key bindings: under Options > Key Bindings > AddOns > Dyre's Quest Targeting,
+bind "Add target to the hit list", "Add target to the hit list (exact name)",
+and "Remove target from the hit list". Each does what `/dqt add`, `/dqt
+add_exact`, or `/dqt remove` does with no name typed, also in combat (the macro
+then updates after combat).
+
 ## The Quest Target box
 
 A rounded box with a thin gold edge (on by default) shows what the macro
@@ -146,7 +152,8 @@ off.
 
 `/dqt` opens the settings: Options > AddOns > Dyre's AddOns > Quest
 Targeting, beside your other Dyre's AddOns; the toolkit's minimap menu opens
-them too. The settings for other AddOns (Questie, Zygor, TomTom) are together
+them too. The settings for other AddOns (Questie, Zygor, RestedXP, QuestTrail,
+TomTom) are together
 under "Integrations (Experimental)". DQT needs **Dyre's Toolkit** 2.0 or later (the CurseForge app
 installs it with DQT). With an older toolkit, the macro still works, its
 settings are under Options > AddOns > Dyre's Quest Targeting, there is no
@@ -234,6 +241,31 @@ waypoint stays. It does not move for the step RestedXP restores at login.
 **Experimental: use it with caution.** It reads RestedXP's own data, not a
 public API, so a RestedXP update can stop it; DQT then follows your quest focus,
 and the macro keeps working.
+
+## With QuestTrail
+
+With **QuestTrail** installed, "Follow QuestTrail's current step" (under
+"Integrations (Experimental)") is on by default; without it, it is greyed out.
+QuestTrail's compass points at the next step of its plan, and DQT targets that
+step: on an objective step, that objective's mobs (or every open objective's);
+on a turn-in step, the turn-in NPC; on a step to take a quest, the NPC who gives
+it (with QuestieDB), or the mobs that drop the item that starts it. It also
+targets QuestTrail's "on the way" objectives (`/qtr ontheway`), the camps its
+route walks through, so you can kill them in passing; the step's own names come
+first. A new step counts as a focus change, so the focus you change last wins;
+QuestTrail setting the game's focus to its step's quest does not count, and is
+not copied to Questie. Without this setting, DQT follows that game focus, so you
+get the step's quest, but not its objective, its quest giver, or "on the way".
+
+"Point TomTom at the focused quest" follows the step too: the TomTom arrow goes
+where QuestTrail's compass goes. QuestTrail follows every new TomTom waypoint as
+its own map pin, and its plan waits while it does, so with QuestTrail loaded
+every waypoint DQT sets is marked so QuestTrail leaves it alone. It does not move
+for the plan QuestTrail restores at login.
+
+**Experimental: use it with caution.** It reads QuestTrail's own data, not a
+public API, so a QuestTrail update can stop it; DQT then follows your quest
+focus, and the macro keeps working.
 
 ## How it works, and its limits
 

@@ -41,6 +41,7 @@ DyresQuestTargeting/
     Macro.lua
     Box.lua
     Options.lua
+    Bindings.xml
     LICENSE
 ```
 

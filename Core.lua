@@ -125,6 +125,7 @@ end
 -- files otherwise fails silently, because the client hides Lua errors by default.
 local REQUIRED_NAMESPACE = {"ParseCommand", "HandleCommand", "FocusedQuest", "GameFocusChanged", "WorldLoading",
     "WorldEntered", "HookQuestieFocus", "QuestieFocusAvailable", "HookZygor", "ZygorAvailable", "HookRxp", "RxpAvailable",
+    "HookQuestTrail", "QuestTrailAvailable",
     "SyncFocus",
     "PointTomTom",
     "ReportQuestDebug", "BuildMacro",
@@ -166,6 +167,7 @@ end
 -- Something to follow: the game's focus, Questie's tracker focus, or a guide.
 function DQT.CanFollowQuests()
     return DQT.HasGameFocus() or DQT.QuestieFocusAvailable() or DQT.ZygorAvailable() or DQT.RxpAvailable()
+        or DQT.QuestTrailAvailable()
 end
 
 -- How a focus is named in chat and the box: its own name, else the game's focus.
@@ -307,6 +309,9 @@ function DQT.SanitizeDB(db)
     end
     if type(db.rxpFocus) ~= "boolean" then
         db.rxpFocus = true
+    end
+    if type(db.qtrFocus) ~= "boolean" then
+        db.qtrFocus = true
     end
     -- Both change other AddOns' state, so they are opt-in.
     if type(db.syncFocus) ~= "boolean" then
@@ -675,6 +680,14 @@ SLASH_DYRESQUESTTARGETING1 = PRIMARY_SLASH
 SLASH_DYRESQUESTTARGETING2 = BACKUP_SLASH
 SlashCmdList[SLASH_KEY] = function(message) DQT.HandleCommand(message) end
 
+-- Key bindings (Bindings.xml, author-approved, 1.4.0): each runs a /dqt command
+-- through the slash handler above, so it has the same checks, also in combat.
+-- The game reads these names when it shows its Key Bindings list.
+BINDING_HEADER_DYRESQUESTTARGETING = "Dyre's Quest Targeting"
+BINDING_NAME_DQT_ADD_TARGET = "Add target to the hit list"
+BINDING_NAME_DQT_ADD_TARGET_EXACT = "Add target to the hit list (exact name)"
+BINDING_NAME_DQT_REMOVE_TARGET = "Remove target from the hit list"
+
 local function LoadDB()
     DyresQuestTargetingDB = DQT.SanitizeDB(DyresQuestTargetingDB)
     DQT.db = DyresQuestTargetingDB
@@ -756,5 +769,6 @@ events:SetScript("OnEvent", function(self, event, firstArg)
     DQT.HookQuestieFocus(DQT.RequestRefresh)
     DQT.HookZygor(DQT.RequestRefresh)
     DQT.HookRxp(DQT.RequestRefresh)
+    DQT.HookQuestTrail(DQT.RequestRefresh)
     DQT.RequestRefresh()
 end)

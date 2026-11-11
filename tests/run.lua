@@ -227,7 +227,8 @@ local function fixture(options)
                 local spawns = options.questie.spawns and options.questie.spawns[questID]
                 local objectives = {}
                 for index, spawn in pairs(spawns or {}) do objectives[index] = {spawnList = spawn} end
-                return {Objectives = objectives}
+                local nearest = options.questie.questSpawns and options.questie.questSpawns[questID] or {}
+                return {Objectives = objectives, spawn = nearest.spawn, zone = nearest.zone, name = nearest.name}
             end,
             -- {rate, source}, as Questie's DropDB answers.
             GetItemDroprate = function(itemID, npcID)
@@ -236,7 +237,10 @@ local function fixture(options)
             end},
             -- An NPC's spawns here are one point and its distance from you.
             DistanceUtils = {GetNearestObjective = function(list) return list.spawn, list.zone, list.name end,
-                GetNearestSpawn = function(spawns) return spawns.at, spawns.zone, spawns.far end},
+                GetNearestSpawn = function(spawns) return spawns.at, spawns.zone, spawns.far end,
+                GetNearestSpawnForQuest = function(quest) return quest.spawn, quest.zone, quest.name end},
+            -- Area IDs to map IDs: area 141 is map 1438 here.
+            ZoneDB = {GetUiMapIdByAreaId = function(_, area) return ({[141] = 1438})[area] end},
         }
         function modules.QuestieDB:GetNPC(npcID)
             local npc = options.questie.npcs and options.questie.npcs[npcID]
@@ -263,6 +267,39 @@ local function fixture(options)
             state.tomtomRemoved[#state.tomtomRemoved + 1] = uid
         end
     end
+    -- LibStub's libraries, as the AddOns below register them.
+    state.libraries = {}
+    if options.rxp or options.questtrail then
+        env.LibStub = {GetLibrary = function(_, name, silent)
+            equal(silent, true, "asks silently")
+            return state.libraries[name]
+        end}
+    end
+    -- QuestTrail: only the fields DQT reads, as its source names them, through its
+    -- modules' library (LibStub "QuestTrail-Modules").ns. options.questtrail.current is
+    -- the compass's target; options.questtrail.noFocus leaves out ns.Focus.
+    if options.questtrail then
+        local ns = {Arrow = {current = options.questtrail.current}}
+        state.qtrHooks = 0
+        for _, name in ipairs({"SavePlan", "Advance", "AdvanceDone"}) do
+            ns.Arrow[name] = function() state.qtrHooks = state.qtrHooks + 1 end
+        end
+        if not options.questtrail.noFocus then
+            -- As Focus.Set: the game's focus on a quest in the log, else none.
+            ns.Focus = {Set = function(questID)
+                local quest = options.quests and options.quests[questID]
+                env.C_SuperTrack.SetSuperTrackedQuestID(quest and questID or 0)
+            end}
+        end
+        state.libraries["QuestTrail-Modules"] = {ns = ns}
+        -- As a new plan: the target set, the game's focus moved to its quest, then SavePlan.
+        function state.qtrStep(current)
+            ns.Arrow.current = current
+            if ns.Focus and current and current.q then ns.Focus.Set(current.q, "plan") end
+            ns.Arrow.SavePlan(current)
+        end
+        state.qtr = ns
+    end
     -- Zygor Guides Viewer: only the fields DQT reads, as its source names
     -- them (a paid AddOn: none of its code is here). options.zygor.step and
     -- .stickies are the shown steps; options.zygor.noMessages leaves out
@@ -287,10 +324,7 @@ local function fixture(options)
             equal(silent, true, "asks silently")
             if name == "RXPGuides" then return addon end
         end}
-        env.LibStub = {GetLibrary = function(_, name, silent)
-            equal(silent, true, "asks silently")
-            if name == "AceAddon-3.0" then return ace end
-        end}
+        state.libraries["AceAddon-3.0"] = ace
         -- As SetStep: the new active steps; RestedXP then updates its list.
         function state.rxpSteps(steps)
             local active = addon.RXPFrame.activeSteps
@@ -659,7 +693,7 @@ local CONDOR_QUEST = {[101] = {title = "The Condor Hunt", objectives = {
 
 test("logs in with a banner and makes the character macro", function()
     local state = fixture()
-    contains(state.messages[1], "DQT: Dyre's Quest Targeting 1.3.0 by Dyre")
+    contains(state.messages[1], "DQT: Dyre's Quest Targeting 1.4.0 by Dyre")
     equal(state.said("Ready."), true)
     equal(state.dqt.available, true)
     contains(state.macro(), "nothing to target")
@@ -906,13 +940,15 @@ test("every integration setting sits under the experimental Integrations heading
     for index, object in ipairs(list) do
         if object.header == "Integrations (Experimental)" then heading = index end
     end
-    local INTEGRATIONS = {"DQT_QUESTIE_FOCUS", "DQT_ZYGOR_FOCUS", "DQT_RXP_FOCUS", "DQT_SYNC_FOCUS", "DQT_TOMTOM"}
+    local INTEGRATIONS = {"DQT_QUESTIE_FOCUS", "DQT_ZYGOR_FOCUS", "DQT_RXP_FOCUS", "DQT_QTR_FOCUS", "DQT_SYNC_FOCUS",
+        "DQT_TOMTOM"}
     for offset, variable in ipairs(INTEGRATIONS) do
         equal(list[heading + offset].setting.variable, variable)
     end
     for index = 1, heading - 1 do
         local variable = list[index].setting and list[index].setting.variable
-        equal(variable == "DQT_QUESTIE_FOCUS" or variable == "DQT_ZYGOR_FOCUS" or variable == "DQT_RXP_FOCUS", false,
+        equal(variable == "DQT_QUESTIE_FOCUS" or variable == "DQT_ZYGOR_FOCUS" or variable == "DQT_RXP_FOCUS"
+            or variable == "DQT_QTR_FOCUS", false,
             "the main section keeps only the macro's own settings")
     end
     for offset = 1, #INTEGRATIONS do
@@ -944,7 +980,7 @@ test("Questie and TomTom settings are greyed out without their AddOns; saved val
     end
     contains(settingRow(none, "DQT_QUESTIE_FOCUS").tooltip, "Needs Questie: greyed out until it is installed")
     contains(settingRow(none, "DQT_SYNC_FOCUS").tooltip, "Needs Questie:")
-    contains(settingRow(none, "DQT_TOMTOM").tooltip, "Needs TomTom, with Questie, Zygor, or RestedXP:")
+    contains(settingRow(none, "DQT_TOMTOM").tooltip, "Needs TomTom, with Questie, Zygor, RestedXP, or QuestTrail:")
     equal(settingRow(none, "DQT_MARK"):Enabled(), true, "other settings stay on")
     local db = none.env.DyresQuestTargetingDB
     equal(db.syncFocus and db.tomtom and db.questieFocus, true, "the saved values stay as they were")
@@ -1302,6 +1338,48 @@ test("/dqt add with no name adds your target, or says to target something", func
     state.secrets[state.target] = true
     state.slash("add")
     contains(state.last(), "cannot be read right now")
+end)
+
+-- Bindings.xml's bindings, as {name, header, body}; the game runs each body as Lua.
+local function bindings()
+    local text = assert(io.open("Bindings.xml", "rb")):read("*a")
+    local found = {}
+    for attributes, body in text:gmatch("<Binding%s+(.-)>(.-)</Binding>") do
+        found[#found + 1] = {name = attributes:match('name="([^"]+)"'),
+            header = attributes:match('header="([^"]+)"'), body = body}
+    end
+    return found
+end
+
+test("key bindings: add, add exact, and remove the target, through /dqt; each is named", function()
+    local found = bindings()
+    equal(#found, 3)
+    equal(found[1].header, "DYRESQUESTTARGETING", "one header, on the first")
+    local state = fixture()
+    equal(state.env.BINDING_HEADER_DYRESQUESTTARGETING, "Dyre's Quest Targeting")
+    local run = {}
+    for _, binding in ipairs(found) do
+        equal(type(state.env["BINDING_NAME_" .. binding.name]), "string", binding.name .. " has a name to show")
+        local chunk = assert(loadstring(binding.body))
+        setfenv(chunk, state.env)
+        run[binding.name] = chunk
+    end
+    run.DQT_ADD_TARGET()
+    equal(state.last(), "DQT: Target a mob or type a name.", "no target: as /dqt add")
+    state.target = "Mangy Wolf"
+    run.DQT_ADD_TARGET()
+    contains(state.macro(), "/tar Mangy Wolf\n")
+    state.target = "Boar"
+    run.DQT_ADD_TARGET_EXACT()
+    contains(state.macro(), "/targetexact Boar\n")
+    run.DQT_REMOVE_TARGET()
+    lacks(state.macro(), "Boar")
+    contains(state.macro(), "/tar Mangy Wolf\n", "only the target goes")
+    state.combat = true
+    state.target = "Kobold"
+    run.DQT_ADD_TARGET()
+    equal(state.env.DyresQuestTargetingDB.added[2].name, "Kobold", "in combat the hit list changes at once")
+    lacks(state.macro(), "Kobold", "the macro waits for the end of combat")
 end)
 
 test("names with ; or too long to fit are refused", function()
@@ -3227,6 +3305,158 @@ test("rxp location: a quest focus chosen after the step takes the arrow back", f
     state.advance()
     equal(#state.tomtomPoints, 1, "not the step's location")
     equal(#state.waypoints, before + 1, "the quest's own path, unchanged")
+end)
+
+local QTR_QUESTS = {[1] = TWO_QUESTS[1], [2] = TWO_QUESTS[2],
+    [5] = {title = "Done Deal", complete = true, objectives = {objective("Thing: 1/1", true)}}}
+local QTR_DB = {items = {[60] = {name = "Wolf Fang", drops = {41}}, [61] = {name = "Strange Note", drops = {44}}},
+    npcs = {[40] = "Gnoll Runt", [41] = "Timber Wolf", [42] = "Zenn Foulhoof", [43] = "Tenaron Stormgrip",
+        [44] = "Note Carrier"},
+    quests = {[2] = {objectives = {{{41, "Wolf slain"}}}},
+        [5] = {finishedBy = {{42}}},
+        [7] = {startedBy = {{43}}}, [8] = {startedBy = {nil, nil, {61}}}}}
+
+local function qtrState(options)
+    options.quests = options.quests or QTR_QUESTS
+    options.db = options.db or QTR_DB
+    options.questtrail = options.questtrail or {}
+    return fixture(options)
+end
+
+test("questtrail: an objective step targets that objective; the game focus it sets is not a change", function()
+    local state = qtrState({focus = 1})
+    contains(state.macro(), "/targetexact Boar", "no step yet: the quest focus")
+    state.qtrStep({kind = "progress", q = 2, oi = 2, key = "x"})
+    state.advance()
+    contains(state.macro(), "/targetexact Bear")
+    lacks(state.macro(), "Wolf", "only the step's objective")
+    equal(boxLines(state)[1], "Wolves (QuestTrail)")
+    equal(state.said("Focused quest changed via QuestTrail (Wolves)"), true)
+    state.slash("list")
+    equal(state.said("QuestTrail's objective step"), true)
+    state.qtrStep({kind = "progress", q = 2, key = "y"})
+    state.advance()
+    contains(state.macro(), "/targetexact Timber Wolf", "no objective: every open one")
+    contains(state.macro(), "/targetexact Bear")
+    state.qtr.Arrow.current = {kind = "progress", q = 2, oi = 1}
+    state.qtr.Arrow.AdvanceDone()
+    state.advance()
+    lacks(state.macro(), "Bear", "its compass moves on within the quest")
+end)
+
+test("questtrail: a take step targets who gives the quest, or an item's droppers; a turn-in step the turn-in", function()
+    local state = qtrState({focus = 1})
+    state.qtrStep({kind = "start", q = 7})
+    state.advance()
+    contains(state.macro(), "/targetexact Tenaron Stormgrip")
+    lacks(state.macro(), "Boar", "a quest not in the log: the game's focus cleared, the step counts")
+    equal(boxLines(state)[1], "quest 7 (QuestTrail)")
+    state.qtrStep({kind = "dropstart", q = 8})
+    state.advance()
+    contains(state.macro(), "/targetexact Note Carrier", "the item that starts it")
+    state.qtrStep({kind = "finish", q = 5})
+    state.advance()
+    contains(state.macro(), "/targetexact Zenn Foulhoof")
+    contains(boxLines(state)[1], "ready to turn in")
+end)
+
+test("questtrail: Questie's focus changed last wins; its next step wins back; other kinds and bad fields do not", function()
+    local state = qtrState({focus = 1, questie = {}})
+    state.qtrStep({kind = "progress", q = 2, oi = 1})
+    state.advance()
+    contains(state.macro(), "/targetexact Timber Wolf")
+    state.questieUtils:FocusQuest(1)
+    state.advance()
+    contains(state.macro(), "/targetexact Boar")
+    state.qtrStep({kind = "progress", q = 2, oi = 2})
+    state.advance()
+    contains(state.macro(), "/targetexact Bear", "a new step")
+    for _, current in ipairs({{kind = "hearth", q = 0}, {kind = "progress", q = "2"}, {kind = "start", q = 99}}) do
+        state.qtrStep(current)
+        state.advance()
+        contains(state.macro(), "/targetexact Boar", "no step to follow: the quest focus")
+    end
+end)
+
+test("questtrail: the game focus it sets is not copied to Questie; its first plan, late, does not point TomTom", function()
+    local state = qtrState({focus = 1, questie = {}, saved = {syncFocus = true}})
+    state.qtrStep({kind = "progress", q = 2, oi = 2})
+    state.advance()
+    contains(state.macro(), "/targetexact Bear")
+    equal(state.env.Questie.db.char.TrackerFocus, nil, "the sync leaves Questie's focus alone, as for a guide")
+
+    local late = qtrState({focus = 1, tomtomApi = true, saved = {tomtom = true}, questie = {npcs = RXP_SPAWNS}})
+    late.advance()
+    late.qtrStep({kind = "progress", q = 2, oi = 2, cm = 1438, mx = 0.7, my = 0.8})
+    late.advance()
+    equal(#late.tomtomPoints, 0, "QuestTrail's first plan comes well after login")
+    late.qtrStep({kind = "progress", q = 2, oi = 1, cm = 1438, mx = 0.1, my = 0.2})
+    late.advance()
+    equal(late.tomtomPoints[1].text, "1438 0.1,0.2", "its next step")
+end)
+
+test("questtrail: off or missing, the game focus it sets counts as before; the setting is greyed without it", function()
+    local off = qtrState({focus = 1, saved = {qtrFocus = false}})
+    off.qtrStep({kind = "progress", q = 2, oi = 2})
+    off.advance()
+    contains(off.macro(), "/targetexact Timber Wolf", "the game's focus, all objectives")
+    equal(boxLines(off)[1], "Wolves (Focus)")
+    equal(settingRow(off, "DQT_QTR_FOCUS"):Enabled(), true)
+    local none = fixture({quests = QTR_QUESTS, focus = 1})
+    equal(settingRow(none, "DQT_QTR_FOCUS"):Enabled(), false)
+    contains(settingRow(none, "DQT_QTR_FOCUS").tooltip, "Needs QuestTrail")
+    local noArrow = fixture({quests = QTR_QUESTS, focus = 1})
+    noArrow.env.LibStub = {GetLibrary = function() return {ns = {}} end}
+    equal(settingRow(noArrow, "DQT_QTR_FOCUS"):Enabled(), false, "a namespace without its Arrow")
+    equal(qtrState({}).qtrHooks, 0)
+end)
+
+test("questtrail: TomTom points silently at its step, never at login; Questie's points are silent too", function()
+    local step = {kind = "progress", q = 2, oi = 1, cm = 1438, mx = 0.5, my = 0.6, ax = 0.4, ay = 0.3}
+    local state = qtrState({tomtomApi = true, saved = {tomtom = true}, questie = {npcs = RXP_SPAWNS},
+        questtrail = {current = step}})
+    state.advance()
+    equal(#state.tomtomPoints, 0, "the plan QuestTrail restores at login")
+    state.qtrStep({kind = "progress", q = 2, oi = 2, cm = 1438, mx = 0.7, my = 0.8})
+    state.advance()
+    equal(state.tomtomPoints[1].text, "1438 0.7,0.8")
+    equal(state.tomtomPoints[1].opts.silent, true, "QuestTrail's compass keeps its plan")
+    state.qtrStep({kind = "progress", q = 2, oi = 1, cm = 1438, mx = 0.9, my = 0.9, ax = 0.2, ay = 0.1})
+    state.advance()
+    equal(state.tomtomPoints[2].text, "1438 0.2,0.1", "where the plan sent you, not the marker tour")
+    state.questieUtils:FocusQuest(2)
+    state.advance()
+    equal(state.tomtomPoints[3].text, "1438 0.3,0.4", "a quest focus: Questie's spawn, through TomTom")
+    equal(state.tomtomPoints[3].opts.silent, true)
+    equal(#state.waypoints, 0, "not Questie's own call, which is not silent")
+end)
+
+test("questtrail: \"on the way\" objectives come before the step's, all on the route last; each name once", function()
+    local quests = {[1] = TWO_QUESTS[1], [2] = TWO_QUESTS[2],
+        [3] = {title = "Kobolds", objectives = {objective("Kobold slain: 0/5"), objective("Rat slain: 0/5")}}}
+    local state = qtrState({quests = quests, focus = 1})
+    state.qtr.Arrow.onTheWay = {
+        {q = 3, i = 2, full = true},
+        {q = 1, i = 1, full = false},
+        {q = 2, i = 2, full = false, step = true},
+        {q = 99, i = 1, full = true},
+        {q = 3, i = "1"},
+    }
+    state.qtrStep({kind = "progress", q = 2, oi = 2})
+    state.advance()
+    inOrder(state.macro(), {"Boar", "Rat", "Bear"})
+    lacks(state.macro(), "Kobold", "only the objective that is on the way")
+    local _, count = state.macro():gsub("/targetexact Bear\n", "")
+    equal(count, 1, "the step's objective once, as the step's")
+    state.qtr.Arrow.onTheWay = nil
+    state.qtrStep({kind = "progress", q = 2, oi = 1})
+    state.advance()
+    lacks(state.macro(), "Boar", "a new plan with nothing on the way")
+    state.qtr.Arrow.onTheWay = {{q = 1, i = 1, full = true}}
+    state.qtr.Arrow.current = {kind = "progress", q = 99, oi = 1}
+    state.qtr.Arrow.SavePlan()
+    state.advance()
+    lacks(state.macro(), "Boar", "a step DQT cannot follow brings no \"on the way\" names alone")
 end)
 
 local function zway(x, y, fields)

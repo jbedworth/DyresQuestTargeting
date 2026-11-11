@@ -6,7 +6,7 @@ Dyre's Quest Targeting (DQT, `/dqt`) is a World of Warcraft: Forever AddOn
 that keeps one targeting macro up to date with the quest you are working on.
 It began as the one RestedXP (RXP) feature the author still wanted, built from
 Forever's own quest journal instead of a guide; since 1.3.0 it can also follow
-a Zygor or RestedXP step. Keep this feature set; do not add speculative features
+a Zygor or RestedXP step, and since 1.4.0 a QuestTrail step. Keep this feature set; do not add speculative features
 or frameworks without agreement.
 
 Naming (author-approved): the title starts with "Dyre's", so players can find
@@ -314,6 +314,51 @@ not a public API. Tests mock only its fields, with no guide text.
   same (source only; RestedXP is not installed in `_classic_era_`). A guide
   counts for `DQT.CanFollowQuests`, so RestedXP without Questie follows its step.
 
+### With QuestTrail (built 1.4.0; author-approved, 2026-11-10)
+
+A player asked: DQT "picks up the focus quest targets but not the targets for the
+'on the way' quests", which they added to the hit list by hand. Source verified in
+QuestTrail 4.2.0 (`_forever_\Interface\AddOns\QuestTrail`, GPL; Forever only, one
+Camelot TOC); private fields, not a public API. Tests mock only its fields.
+
+- QuestTrail is a route planner, not a guide: its compass points at the next step
+  of its plan, `ns.Arrow.current` ({kind, q, oi, cm, mx, my, ax, ay, key, path}).
+  DQT reaches `ns` through `LibStub:GetLibrary("QuestTrail-Modules", true).ns`, the
+  library QuestTrail hands its own modules (Core/QuestTrail_API.lua).
+  `DQT.QuestTrailAvailable`: that `ns` with an `Arrow` table.
+- It already sets the game's focus to its step's quest (`ns.Focus.Set`,
+  UI/QuestTrail_Pins.lua:736; 0 for a quest not in the log), so before 1.4.0 DQT
+  followed the quest, not the step. "Follow QuestTrail's current step"
+  (`db.qtrFocus`, default on, greyed without it) adds the step: kinds "progress"
+  (that objective, `oi`, with `ObjectiveTargets`; every open one without it),
+  "finish" (`finishedBy`, source "turnin"), and "start" and "dropstart" (author:
+  "target the quest giver": `startedBy` NPCs, source "talk", and the droppers of an
+  item that starts it, source "drop"). Other kinds (hearth, the map pin, corpse) are
+  no step. Header "(QuestTrail)", under it "QuestTrail: objective step" (take step,
+  turn-in step), `/dqt list` "(QuestTrail's ...)". A step that names no one falls
+  back to the quest focus.
+- "On the way" (`ns.Arrow.onTheWay`, Planner/QuestTrail_OnTheWay.lua, made with each
+  plan): {q, i, full, step, ...}, objectives in the log whose camps the plan's walk
+  crosses, all-on-the-route first. Their targets go before the step's (less
+  important), the fully crossed ones nearer the step; BuildMacro keeps each name once.
+- `guideFocus` "qtr": a new step key (kind, quest, objective) not while loading makes
+  it the latest; the step at the end of loading is the one later steps compare with;
+  at login after Zygor and RestedXP. A game focus on the step's quest changes nothing
+  (no latest focus, no sync), as for the guides. Signals: `hooksecurefunc` on
+  `ns.Arrow` SavePlan (after each new plan sets the target), Advance, AdvanceDone,
+  FocusNow, Skip, ResetRoute, RestorePlan, and `ns.Focus.Set`; not `A.Update`, which
+  runs 20 times a second. A plan's interim target (while a long plan runs) shows only
+  when the plan ends.
+- TomTom (author, option C): QuestTrail sets no TomTom waypoint, but hooks
+  `TomTom:AddWaypoint` and follows each new waypoint as its own map pin, and its plan
+  waits (Planner/QuestTrail_Way.lua:152-163); it ignores `opts.silent`. So with
+  QuestTrail loaded, every DQT waypoint is set with `TomTom:AddWaypoint` and `silent`:
+  the step's location (`cm`; `ax`, `ay`, where the plan sent you, as the marker tour
+  moves `mx`, `my`; 0 to 1), and Questie's spawns too (`ZoneDB:GetUiMapIdByAreaId`, and
+  `DistanceUtils.GetNearestSpawnForQuest` for a quest, as `SetQuestTomTomTarget`
+  does), since Questie's own calls are not silent. Never at login: QuestTrail
+  restores its last plan then, and its first new plan can come a minute later.
+
 ### With Questie installed (built; author-approved, both default off)
 
 Both are marked experimental (author): under the settings section heading
@@ -326,15 +371,15 @@ safety check and changes no name.
 That heading holds every setting for another AddOn (author, 1.3.0, renamed
 from "Questie Synchronization": "I had a hard time finding the setting"),
 in this order: "Follow Questie's tracker focus", "Follow Zygor's current
-step", "Follow RestedXP's current step", "Keep Questie's and the game's focus in sync", and "Point TomTom at
-the focused quest". Above it, the macro's own settings: the switch, the
+step", "Follow RestedXP's current step", "Follow QuestTrail's current step", "Keep
+Questie's and the game's focus in sync", and "Point TomTom at the focused quest". Above it, the macro's own settings: the switch, the
 markers, the opener, and the account-wide macro. Only the place changed:
 saved keys, defaults, greying, and dependencies stay.
 
 Without their AddOns (author, 1.1.1), "Follow Questie's tracker focus" and
 "Keep Questie's and the game's focus in sync" (Questie) and "Point TomTom at
-the focused quest" (TomTom, and Questie, Zygor, or RestedXP: a step's location
-needs no Questie) are greyed out, not hidden, with a
+the focused quest" (TomTom, and Questie, Zygor, RestedXP, or QuestTrail: a step's
+location needs no Questie) are greyed out, not hidden, with a
 tooltip line that names what they need; saved values stay as they are. The
 check is an initializer modify predicate (`AddModifyPredicate`,
 Blizzard_SettingControls.lua), which the settings list runs each time it
@@ -358,7 +403,7 @@ tests the same globals the features use (`QuestieLoader`, `TomTom`).
   Questie's "Set TomTom Target" does: an objective focus uses that
   objective's `spawnList` with `DistanceUtils.GetNearestObjective`, a quest
   focus `SetQuestTomTomTarget`. A guide step: see "With Zygor Guides Viewer" and
-  "With RestedXP".
+  "With RestedXP"; QuestTrail loaded: see "With QuestTrail".
   Pointed again when the focus, the unfinished
   objectives, the macro's quest mobs, or completion change; when the setting
   is turned on; never at login, so a waypoint of the player's own stays.
@@ -525,6 +570,14 @@ minimap menu, and widgets (contract 2). The Quest Target box is a widget.
 
 ### Commands
 
+- Key bindings (author-approved, 1.4.0): Bindings.xml, header
+  "Dyre's Quest Targeting" (category ADDONS, as Dyre's Tank Tools), with "Add
+  target to the hit list", "Add target to the hit list (exact name)", and "Remove
+  target from the hit list". Each runs `SlashCmdList.DYRESQUESTTARGETING` with
+  `add`, `add_exact`, or `remove`, so it has the same checks and works in combat;
+  no new global and no button click (`/click` does not press AddOn buttons). The
+  `BINDING_` names are set in Core.lua. The game reads Bindings.xml by name, so the
+  TOC does not list it.
 - `/dqt` opens the settings (author-approved; not in combat, where it says
   so), as `/dqt options` does. `/dqt list` lists the focused quest, the names
   most wanted first with where each came from (and drop rates), names left
@@ -551,7 +604,8 @@ minimap menu, and widgets (contract 2). The Quest Target box is a widget.
 ## Project structure
 
 - Runtime files: DyresQuestTargeting.toc, Commands.lua, Core.lua, Quest.lua,
-  Macro.lua, Box.lua, Options.lua, loaded in that order. Commands parses `/dqt`; Core
+  Macro.lua, Box.lua, Options.lua, loaded in that order, and Bindings.xml (the key
+  bindings, read by the game by name). Commands parses `/dqt`; Core
   owns saved settings and their repair, the login banner, install and API
   checks, slash conflict reporting, the hit list, refresh scheduling, joining
   Dyre's Toolkit, and startup; Quest builds the focused quest's names; Macro builds and writes the
@@ -581,7 +635,8 @@ minimap menu, and widgets (contract 2). The Quest Target box is a widget.
   the in-game AddOn list. Its `## Category: Quests` groups it only when the
   toolkit is missing; keep that identical to the CurseForge main category,
   because the list groups by exact text.
-- No runtime assets. Add none without agreement.
+- No runtime assets besides Bindings.xml (author-approved, 1.4.0). Add none
+  without agreement.
 - Git origin: git@github.com:jbedworth/DyresQuestTargeting.git (public, as
   all of the author's AddOns). Inspect Git state before acting and preserve
   user work. Text is LF under .gitattributes.
@@ -645,7 +700,7 @@ minimap menu, and widgets (contract 2). The Quest Target box is a widget.
   player-facing changes; the builder puts it at the top of release-notes.md
   and fails without it.
 - Package only DyresQuestTargeting.toc, Commands.lua, Core.lua, Quest.lua,
-  Macro.lua, Box.lua, Options.lua, and LICENSE under the top-level
+  Macro.lua, Box.lua, Options.lua, Bindings.xml, and LICENSE under the top-level
   `DyresQuestTargeting/` folder, named
   `DyresQuestTargeting-<version>-forever.zip`, with the builder's
   BigWigs-format `release.json` (flavor `forever`) attached for WowUp.

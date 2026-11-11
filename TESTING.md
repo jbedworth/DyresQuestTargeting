@@ -103,6 +103,26 @@ With `/dqt debug` for details:
    Forever's mobs.
 7. `/dqt add Goretusk` finds Great Goretusk; `/dqt add_exact` does not.
    `/dqt add` with a dead mob targeted adds its name.
+33. With QuestTrail (and Questie, QuestieDB, TomTom): "Follow QuestTrail's
+    current step" is on, under "Integrations (Experimental)"; with QuestTrail
+    disabled and `/reload`, it is greyed. When the compass points at an objective:
+    the macro and box follow it (header "<quest> (QuestTrail)", then "QuestTrail:
+    objective step"), with only that objective's mobs. `/qtr ontheway` lists
+    objectives: their mobs are in `/dqt list`, before the step's. A step to take a
+    quest: the quest giver. A turn-in step: the turn-in NPC. Focus another quest in
+    Questie's tracker: it wins; the next compass step wins back, with "Focused quest
+    changed via QuestTrail (...)". "Point TomTom at the focused quest" on: a
+    `/reload` does not move the arrow; the next step moves TomTom's arrow to the
+    compass's target, and QuestTrail's compass keeps its plan (no map pin taken
+    from TomTom). Focus a quest in Questie's tracker: TomTom points at its mob, and
+    QuestTrail still keeps its plan. `/dqt debug` shows "QuestTrail: step ...". No
+    Lua errors.
+32. Key bindings: Options > Key Bindings > AddOns shows "Dyre's Quest
+    Targeting" with three bindings. Bind each to a key. Target a mob: the add
+    key adds it with similar names, the exact key with its exact name, the
+    remove key takes it off; with no target, the add key says "Target a mob or
+    type a name.". In combat: the hit list changes at once and the macro after
+    combat. No Lua errors.
 8. In combat: `/dqt add` says the macro updates after combat; it does, once
    combat ends, and nothing is blocked (no "AddOn action blocked" message).
 9. Opener: the dropdown lists your spellbook, every rank up to the one shown;

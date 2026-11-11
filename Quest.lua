@@ -244,9 +244,10 @@ local lastGameID
 local guideFocus = "login"
 local lastZygorKey
 local lastRxpKey
+local lastQtrKey
 -- The first step of a session is the one the guide restores, perhaps well
 -- after login: TomTom is not pointed at it, so a waypoint of your own stays.
-local restoring = {Zygor = true, RestedXP = true}
+local restoring = {Zygor = true, RestedXP = true, QuestTrail = true}
 -- The side you changed last ("questie" or "game"), until SyncFocus copies it
 -- to the other; and the quest both last agreed on.
 local syncFrom
@@ -503,6 +504,53 @@ local function RxpQuests()
     return quests
 end
 
+-- QuestTrail's plan step (author-approved, 1.4.0; source verified in QuestTrail
+-- 4.2.0): its compass's target, ns.Arrow.current, with a kind, a quest (q), and
+-- perhaps an objective (oi). QuestTrail gives its modules its namespace through
+-- LibStub("QuestTrail-Modules").ns (Core/QuestTrail_API.lua); private fields,
+-- not a public API: each is checked, and without them DQT follows the quest focus.
+-- Other kinds (the hearthstone, the map pin, a corpse) are not quest steps.
+local QTR_STEP_TEXT = {start = "take step", dropstart = "take step", progress = "objective step",
+    finish = "turn-in step"}
+-- QuestTrail's functions that set or move on its target (Planner/QuestTrail_Planner.lua and
+-- _Compass.lua): SavePlan runs after each new plan sets it; Focus.Set when the plan's quest
+-- changes. Not its update, which runs 20 times a second.
+local QTR_HOOKS = {"SavePlan", "Advance", "AdvanceDone", "FocusNow", "Skip", "ResetRoute", "RestorePlan"}
+
+local function QuestTrail()
+    local stub = _G.LibStub
+    if type(stub) ~= "table" or type(stub.GetLibrary) ~= "function" then
+        return nil
+    end
+    local hub = stub:GetLibrary("QuestTrail-Modules", true)
+    local ns = type(hub) == "table" and hub.ns
+    if type(ns) == "table" and type(ns.Arrow) == "table" then
+        return ns
+    end
+end
+
+function DQT.QuestTrailAvailable()
+    return QuestTrail() ~= nil
+end
+
+local function QtrStep()
+    local ns = DQT.db.qtrFocus and QuestTrail()
+    local step = ns and ns.Arrow.current
+    if type(step) == "table" and QTR_STEP_TEXT[step.kind] and not DQT.IsSecret(step.q) and type(step.q) == "number"
+            and step.q > 0 then
+        return step
+    end
+end
+
+local function QtrKey(step)
+    return step.kind .. ":" .. step.q .. ":" .. tostring(type(step.oi) == "number" and step.oi or "")
+end
+
+local function CurrentQtrKey()
+    local step = QtrStep()
+    return step and QtrKey(step)
+end
+
 -- SUPER_TRACKING_CHANGED: the game's focus wins only when you focus a
 -- different quest; the event also fires for map pins and other changes. A
 -- game focus on Questie's own quest keeps Questie's, so an objective focus
@@ -518,7 +566,9 @@ local function GuideHasQuest(questID)
             return true
         end
     end
-    return false
+    -- QuestTrail sets the game's focus to its step's quest (ns.Focus.Set).
+    local step = QtrStep()
+    return step ~= nil and step.q == questID
 end
 
 function DQT.GameFocusChanged()
@@ -582,6 +632,40 @@ local function NoteRxpStep()
     end
 end
 
+-- A new QuestTrail step (not while the world loads) makes it the latest focus.
+local function NoteQtrStep()
+    local key = CurrentQtrKey()
+    if key and key ~= lastQtrKey then
+        if not loading then
+            guideFocus = "qtr"
+        end
+        if lastQtrKey then
+            restoring.QuestTrail = false
+        end
+        lastQtrKey = key
+    end
+end
+
+-- Only asks for a rebuild. Returns true when hooked.
+function DQT.HookQuestTrail(onChange)
+    local ns = QuestTrail()
+    if type(hooksecurefunc) ~= "function" or not ns then
+        return false
+    end
+    local hooked = false
+    for _, name in ipairs(QTR_HOOKS) do
+        if type(ns.Arrow[name]) == "function" then
+            hooksecurefunc(ns.Arrow, name, function() onChange() end)
+            hooked = true
+        end
+    end
+    if type(ns.Focus) == "table" and type(ns.Focus.Set) == "function" then
+        hooksecurefunc(ns.Focus, "Set", function() onChange() end)
+        hooked = true
+    end
+    return hooked
+end
+
 -- RestedXP runs UpdateUnitList when its target list changes (Targeting.lua).
 -- Only asks for a rebuild. Its RXP_STEP_ messages would need AceEvent, which DQT
 -- does not embed; this hook and the quest events are enough. Returns true when
@@ -617,6 +701,7 @@ function DQT.WorldEntered()
         lastGameID = GameFocus()
         lastZygorKey = CurrentZygorKey() or lastZygorKey
         lastRxpKey = CurrentRxpKey() or lastRxpKey
+        lastQtrKey = CurrentQtrKey() or lastQtrKey
     end)
 end
 
@@ -846,10 +931,93 @@ local function RxpQuest(db)
     }
 end
 
+-- QuestTrail's "on the way" (Planner/QuestTrail_OnTheWay.lua, A.onTheWay, made with
+-- each plan): objectives of quests in your log whose camps the plan's walk crosses, to
+-- kill in passing, as {q, i (objective index), full, ...}, all on the route first. Their
+-- targets, less important than the step's (author: a player asked for them; they were
+-- adding them to the hit list by hand). The fully crossed ones are wanted more.
+local function OnTheWayTargets(db, ns)
+    local targets = {}
+    local list = ns.Arrow.onTheWay
+    if type(list) ~= "table" then
+        return targets
+    end
+    for index = #list, 1, -1 do
+        local entry = list[index]
+        local questID = type(entry) == "table" and entry.q
+        if not DQT.IsSecret(questID) and InLog(questID) and type(entry.i) == "number" then
+            for _, target in ipairs(ObjectiveTargets(db, questID, entry.i)) do
+                targets[#targets + 1] = target
+            end
+        end
+    end
+    return targets
+end
+
+-- QuestTrail's step as a focused "quest": an objective step targets that objective
+-- (or every open one), a turn-in step the turn-in, a take step who gives the quest
+-- (QuestieDB's startedBy), and for a quest an item starts, that item's droppers; and
+-- before them, its "on the way" objectives. Nil when it names no one, so the quest
+-- focus counts.
+local function QtrQuest(db)
+    local step = QtrStep()
+    if not step then
+        return nil
+    end
+    local ns = QuestTrail()
+    local questID = step.q
+    local targets = {}
+    if step.kind == "progress" then
+        if not InLog(questID) then
+            return nil
+        end
+        targets = ObjectiveTargets(db, questID, type(step.oi) == "number" and step.oi or nil)
+        if #targets == 0 then
+            return nil
+        end
+    elseif step.kind == "finish" then
+        local finishers = db and db.quest.finishedBy(questID)
+        if type(finishers) == "table" then
+            AddNpcs(targets, Npcs(db, finishers[1], MAX_TURN_IN), "turnin")
+        end
+    else
+        local starters = db and type(db.quest.startedBy) == "function" and db.quest.startedBy(questID)
+        if type(starters) == "table" then
+            for _, item in ipairs(type(starters[3]) == "table" and starters[3] or {}) do
+                AddNpcs(targets, Npcs(db, db.item.npcDrops(item), MAX_DROPPERS), "drop", DQT.CheckName(db.item.name(item)))
+            end
+            AddNpcs(targets, Npcs(db, starters[1], MAX_TURN_IN), "talk")
+        end
+    end
+    if #targets == 0 then
+        return nil
+    end
+    -- A name in both keeps its place as the step's: BuildMacro keeps each name once,
+    -- at its most important place.
+    local passing = OnTheWayTargets(db, ns)
+    for _, target in ipairs(targets) do
+        passing[#passing + 1] = target
+    end
+    targets = passing
+    local named = db and type(db.quest.name) == "function" and db.quest.name(questID)
+    return {
+        id = "qtr " .. QtrKey(step),
+        via = "QuestTrail",
+        title = DQT.QuestTitle(questID) or DQT.CheckName(named) or ("quest " .. questID),
+        logQuest = InLog(questID) and questID or nil,
+        stepText = QTR_STEP_TEXT[step.kind],
+        complete = step.kind == "finish",
+        database = db ~= nil,
+        open = {},
+        targets = targets,
+    }
+end
+
 -- The focused quest and its targets, ordered least to most important, or nil.
 function DQT.FocusedQuest()
     local db = Database()
     NoteRxpStep()
+    NoteQtrStep()
     if guideFocus == "zygor" or guideFocus == "login" then
         local zygor = ZygorQuest(db)
         if zygor then
@@ -860,6 +1028,12 @@ function DQT.FocusedQuest()
         local rxp = RxpQuest(db)
         if rxp then
             return rxp
+        end
+    end
+    if guideFocus == "qtr" or guideFocus == "login" then
+        local qtr = QtrQuest(db)
+        if qtr then
+            return qtr
         end
     end
     local questID, via, objectiveIndex = ChooseFocus()
@@ -1045,6 +1219,28 @@ local function RxpLocation()
     end
 end
 
+-- QuestTrail: its compass's target, where the plan sent you (ax, ay; its marker
+-- tour moves mx, my from there), on the map cm, 0 to 1.
+local function QtrLocation()
+    local step = QtrStep()
+    if not step then
+        return nil
+    end
+    local x = type(step.ax) == "number" and step.ax or step.mx
+    local y = type(step.ay) == "number" and step.ay or step.my
+    if type(step.cm) ~= "number" or type(x) ~= "number" or type(y) ~= "number" then
+        return nil
+    end
+    return {
+        via = "QuestTrail",
+        step = QtrKey(step),
+        title = "QuestTrail: " .. (DQT.QuestTitle(step.q) or ("quest " .. step.q)),
+        map = step.cm,
+        x = x,
+        y = y,
+    }
+end
+
 -- The latest guide's location, or nil. It counts while that guide is the latest
 -- focus, also on a step that names no one (a travel step), when the macro
 -- follows the quest focus.
@@ -1055,6 +1251,9 @@ local function GuideLocation()
     end
     if not location and (guideFocus == "rxp" or guideFocus == "login") then
         location = RxpLocation()
+    end
+    if not location and (guideFocus == "qtr" or guideFocus == "login") then
+        location = QtrLocation()
     end
     return location
 end
@@ -1086,7 +1285,10 @@ local function PointAtLocation(location)
     end
     -- Without Questie nothing remembers the waypoint across a /reload, so it is
     -- not saved; it would stay on the map for good.
-    local options = {title = location.title, crazy = true, from = "DyresQuestTargeting"}
+    -- QuestTrail follows every TomTom waypoint as its own map pin, and its plan waits
+    -- (Planner/QuestTrail_Way.lua); it leaves a silent one alone.
+    local options = {title = location.title, crazy = true, from = "DyresQuestTargeting",
+        silent = QuestTrail() and true or nil}
     if not char then
         options.persistent = false
     end
@@ -1097,6 +1299,45 @@ local function PointAtLocation(location)
         ownWaypoint = waypoint
     end
     return true
+end
+
+-- A point from Questie's spawn data (an area ID, x and y 0 to 100): through Questie,
+-- or, with QuestTrail loaded, silently through TomTom (Questie's call is not silent).
+local function SetTarget(utils, name, zone, x, y)
+    if not QuestTrail() then
+        utils:SetTomTomTarget(name, zone, x, y)
+        return true
+    end
+    local zones = QuestieModule("ZoneDB")
+    local map = zones and type(zones.GetUiMapIdByAreaId) == "function" and zones:GetUiMapIdByAreaId(zone)
+    if type(map) ~= "number" then
+        return false
+    end
+    return PointAtLocation({map = map, x = x / 100, y = y / 100, title = name})
+end
+
+-- A quest's nearest objective or turn-in, as Questie's "Set TomTom Target"
+-- (TrackerUtils.SetQuestTomTomTarget); with QuestTrail loaded, its same steps here.
+local function QuestTarget(utils, questID)
+    if not QuestTrail() then
+        if type(utils.SetQuestTomTomTarget) == "function" then
+            utils.SetQuestTomTomTarget(questID)
+        end
+        return
+    end
+    local questieDB, distance = QuestieModule("QuestieDB"), QuestieModule("DistanceUtils")
+    if not (questieDB and distance and type(questieDB.GetQuest) == "function"
+            and type(distance.GetNearestSpawnForQuest) == "function") then
+        return
+    end
+    local data = questieDB.GetQuest(questID)
+    if type(data) ~= "table" then
+        return
+    end
+    local spawn, zone, name = distance.GetNearestSpawnForQuest(data)
+    if type(spawn) == "table" then
+        SetTarget(utils, name, zone, spawn[1], spawn[2])
+    end
 end
 
 local function MacroNpcIDs(kept)
@@ -1135,8 +1376,7 @@ local function MacroWaypoint(utils, kept)
     if not best then
         return false
     end
-    utils:SetTomTomTarget(best.name, best.zone, best.spawn[1], best.spawn[2])
-    return true
+    return SetTarget(utils, best.name, best.zone, best.spawn[1], best.spawn[2])
 end
 
 local function ObjectiveWaypoint(utils, quest)
@@ -1154,8 +1394,7 @@ local function ObjectiveWaypoint(utils, quest)
     if type(spawn) ~= "table" then
         return false
     end
-    utils:SetTomTomTarget(name, zone, spawn[1], spawn[2])
-    return true
+    return SetTarget(utils, name, zone, spawn[1], spawn[2])
 end
 
 local function IsOpen(quest, index)
@@ -1216,8 +1455,8 @@ function DQT.PointTomTom(quest, kept, force)
     if restoring[quest.via] ~= nil then
         questID = quest.logQuest
     end
-    if questID and type(utils.SetQuestTomTomTarget) == "function" then
-        utils.SetQuestTomTomTarget(questID)
+    if questID then
+        QuestTarget(utils, questID)
     end
 end
 
@@ -1235,6 +1474,9 @@ function DQT.ReportQuestDebug()
     local rxpSteps, rxpCurrent, rxp = RxpSteps()
     DQT.Report("debug RestedXP: " .. (not Rxp() and "not loaded" or not DQT.db.rxpFocus and "not followed"
         or not rxpCurrent and "no step" or ("step " .. RxpKey(rxpCurrent, rxp) .. ", " .. #rxpSteps .. " active")))
+    local qtrStep = QtrStep()
+    DQT.Report("debug QuestTrail: " .. (not QuestTrail() and "not loaded" or not DQT.db.qtrFocus and "not followed"
+        or not qtrStep and "no quest step" or ("step " .. QtrKey(qtrStep))))
     local location = GuideLocation()
     DQT.Report("debug guide location: " .. (location and (location.title .. " map " .. location.map .. " "
         .. location.x .. "," .. location.y) or "none"))

@@ -46,6 +46,7 @@ class CurseForgeTests(unittest.TestCase):
             (f"## Interface: 16001, 11509\n## Version: {version}\n"
              + "\n".join(builder.RUNTIME_FILES) + "\n").encode("utf-8"))
         (source / "LICENSE").write_bytes(builder.MIT_NOTICE.encode("utf-8"))
+        (source / builder.BINDINGS_FILE).write_bytes(b"<Bindings>\n</Bindings>\n")
         for name in builder.RUNTIME_FILES:
             (source / name).write_bytes(b"local addonName, DQT = ...\n")
         (source / builder.CHANGELOG_NAME).write_bytes(

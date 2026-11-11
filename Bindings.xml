@@ -1,0 +1,11 @@
+<Bindings>
+    <Binding name="DQT_ADD_TARGET" header="DYRESQUESTTARGETING" category="ADDONS">
+        SlashCmdList.DYRESQUESTTARGETING("add")
+    </Binding>
+    <Binding name="DQT_ADD_TARGET_EXACT" category="ADDONS">
+        SlashCmdList.DYRESQUESTTARGETING("add_exact")
+    </Binding>
+    <Binding name="DQT_REMOVE_TARGET" category="ADDONS">
+        SlashCmdList.DYRESQUESTTARGETING("remove")
+    </Binding>
+</Bindings>

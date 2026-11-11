@@ -23,16 +23,18 @@ local category, layout
 -- SpellInfo.castTime is in milliseconds, 0 for instant. Checked per rank, as
 -- "Name(Rank N)": a low rank often casts faster than the top one.
 local MAX_OPENER_CAST_MS = 1000
--- Shown in the Questie sync and TomTom tooltips. The Questie, Zygor, and
--- TomTom settings share one section heading.
+-- Shown in the Questie sync and TomTom tooltips. The settings for other AddOns
+-- share one section heading.
 local EXPERIMENTAL = " Experimental: it uses Questie's own code, not a public API. Use with caution."
 local INTEGRATIONS_HEADING = "Integrations (Experimental)"
 local NEEDS_QUESTIE = " Needs Questie: greyed out until it is installed and on."
 local NO_GAME_FOCUS = " This client has no quest focus of its own, so DQT always follows Questie's."
 local NO_GAME_SYNC = " This client has no quest focus of its own, so there is nothing to sync."
-local NEEDS_QUESTIE_TOMTOM = " Needs TomTom, with Questie, Zygor, or RestedXP: greyed out until they are installed and on."
+local NEEDS_QUESTIE_TOMTOM = " Needs TomTom, with Questie, Zygor, RestedXP, or QuestTrail: greyed out until they are "
+    .. "installed and on."
 local NEEDS_ZYGOR = " Needs Zygor Guides Viewer: greyed out until it is installed and on."
 local NEEDS_RXP = " Needs RestedXP: greyed out until it is installed and on."
+local NEEDS_QTR = " Needs QuestTrail: greyed out until it is installed and on."
 local BOX_HEADING = "Quest Target Box"
 
 -- Harmful and fast enough to open with. Without the spell APIs, every spell
@@ -229,8 +231,13 @@ local function RxpLoaded()
     return DQT.RxpAvailable()
 end
 
+local function QuestTrailLoaded()
+    return DQT.QuestTrailAvailable()
+end
+
 local function QuestieAndTomTomLoaded()
-    return type(TomTom) == "table" and (QuestieLoaded() or DQT.ZygorAvailable() or DQT.RxpAvailable())
+    return type(TomTom) == "table" and (QuestieLoaded() or DQT.ZygorAvailable() or DQT.RxpAvailable()
+        or DQT.QuestTrailAvailable())
 end
 
 local function Needs(initializer, loaded)
@@ -315,6 +322,11 @@ function DQT.InitializeOptions()
             .. "no one leaves the quest focus in charge. RestedXP's own targeting macro is left alone. "
             .. "Experimental: it reads RestedXP's own data, not a public API. Use with caution."
             .. NEEDS_RXP), RxpLoaded)
+    Needs(Flag("DQT_QTR_FOCUS", "Follow QuestTrail's current step", "qtrFocus", true,
+        "With QuestTrail installed, also target the mobs and NPCs of the step its compass points at: the "
+            .. "objective, the turn-in, or who gives the quest. Whichever focus changed last wins; a new step counts "
+            .. "as a change. QuestTrail's own compass is left alone. Experimental: it reads QuestTrail's own data, "
+            .. "not a public API. Use with caution." .. NEEDS_QTR), QuestTrailLoaded)
     Needs(Flag("DQT_SYNC_FOCUS", "Keep Questie's and the game's focus in sync", "syncFocus", false,
         "With Questie installed: focusing a quest in Questie's tracker also focuses it in the game's quest "
             .. "log and map, and the other way round. A Questie objective focus gives the game its quest. "
@@ -330,8 +342,9 @@ function DQT.InitializeOptions()
             end
         end)
     Needs(Settings.CreateCheckbox(category, tomtom,
-        "Points the TomTom arrow at the location of Zygor's or RestedXP's current step, when you follow one and "
-            .. "it has a location. Otherwise, with Questie, at the nearest of the quest mobs the macro looks for "
+        "Points the TomTom arrow at the location of Zygor's, RestedXP's, or QuestTrail's current step, when you "
+            .. "follow one and it has a location. With QuestTrail loaded, the waypoint is set so QuestTrail's compass "
+            .. "keeps its own plan. Otherwise, with Questie, at the nearest of the quest mobs the macro looks for "
             .. "(the best droppers, for a quest item), or at the turn-in once the quest is done. It moves when the "
             .. "step, its waypoint, the focused quest or objective changes, an objective is done, or the quest "
             .. "is ready to turn in." .. EXPERIMENTAL .. NEEDS_QUESTIE_TOMTOM), QuestieAndTomTomLoaded)
