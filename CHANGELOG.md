@@ -3,11 +3,13 @@
 Player-facing changes for each Dyre's Quest Targeting release, newest first. The
 release builder puts the matching section at the top of each release's notes.
 
-## 1.4.0
+## 1.4.1
+
+The QuestTrail support is new and in beta. Please tell us how it works for you, and what goes wrong, in the comments on CurseForge or in an issue on GitHub.
 
 ### Features
 
-- With QuestTrail: the macro can target the step QuestTrail's compass points at (that objective's mobs, the turn-in, or who gives the quest) and its "on the way" objectives, the camps its route walks through. "Follow QuestTrail's current step" in the settings, on by default, greyed out without QuestTrail. With "Point TomTom at the focused quest", the TomTom arrow goes where QuestTrail's compass goes. Experimental: it reads QuestTrail's own data, not a public API, so a QuestTrail update can stop it; the macro keeps working.
+- With QuestTrail (beta): the macro can target the step QuestTrail's compass points at (that objective's mobs, the turn-in, or who gives the quest) and its "on the way" objectives, the camps its route walks through. "Follow QuestTrail's current step" in the settings, on by default, greyed out without QuestTrail. With "Point TomTom at the focused quest", the TomTom arrow goes where QuestTrail's compass goes. Experimental: it reads QuestTrail's own data, not a public API, so a QuestTrail update can stop it; the macro keeps working.
 - With QuestTrail loaded, the TomTom waypoints DQT sets no longer take over QuestTrail's compass.
 - Key bindings for the hit list: add your target, add it with its exact name, or remove it. Find them under Options > Key Bindings > AddOns > Dyre's Quest Targeting.
 

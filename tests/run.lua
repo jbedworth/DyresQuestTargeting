@@ -693,7 +693,7 @@ local CONDOR_QUEST = {[101] = {title = "The Condor Hunt", objectives = {
 
 test("logs in with a banner and makes the character macro", function()
     local state = fixture()
-    contains(state.messages[1], "DQT: Dyre's Quest Targeting 1.4.0 by Dyre")
+    contains(state.messages[1], "DQT: Dyre's Quest Targeting 1.4.1 by Dyre")
     equal(state.said("Ready."), true)
     equal(state.dqt.available, true)
     contains(state.macro(), "nothing to target")
