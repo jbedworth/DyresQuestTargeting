@@ -72,6 +72,14 @@ RestedXP has its own targeting macro and arrow, and DQT leaves them alone. DQT f
 - RestedXP is a separate product. DQT does not install it, and the setting is greyed out without it.
 - Experimental, to be used with caution: DQT reads RestedXP's own data, not a public API, so a RestedXP update can stop it. DQT then follows your quest focus, and the macro keeps working.
 
+### With QuestTrail
+QuestTrail's compass plans your route. DQT targets the step it points at: that objective's mobs, the turn-in NPC, or who gives the quest. It also targets the "on the way" objectives, the camps the route walks through, so you no longer add them to the hit list by hand.
+- A new step updates the macro by itself. The box header and `/dqt list` say "(QuestTrail)".
+- The focus you change last wins. QuestTrail setting the game's focus to its step's quest does not count.
+- With TomTom, TomTom's arrow goes where QuestTrail's compass goes, and QuestTrail's compass keeps its plan.
+- QuestTrail is a separate AddOn. DQT does not install it, and the setting is greyed out without it.
+- Experimental, to be used with caution: DQT reads QuestTrail's own data, not a public API, so a QuestTrail update can stop it. DQT then follows your quest focus, and the macro keeps working.
+
 ### What it does when it finds one
 - Goes back to your last target if what it found is dead, and marks a mob with a skull or an NPC with a green triangle (both can be changed or turned off).
 - Optionally starts attacking, or casts a spell you pick from your spellbook (harmful, 1 second or less), such as a low rank you tag mobs with.
@@ -82,14 +90,6 @@ A small box shows your focused quest, what the macro looks for (with drop rates)
 
 ### Per character
 Each character has its own macro and its own hit list. Short of character macro slots? A setting uses one account-wide macro instead.
-
-### With QuestTrail
-QuestTrail's compass plans your route. DQT targets the step it points at: that objective's mobs, the turn-in NPC, or who gives the quest. It also targets the "on the way" objectives, the camps the route walks through, so you no longer add them to the hit list by hand.
-- A new step updates the macro by itself. The box header and `/dqt list` say "(QuestTrail)".
-- The focus you change last wins. QuestTrail setting the game's focus to its step's quest does not count.
-- With TomTom, TomTom's arrow goes where QuestTrail's compass goes, and QuestTrail's compass keeps its plan.
-- QuestTrail is a separate AddOn. DQT does not install it, and the setting is greyed out without it.
-- Experimental, to be used with caution: DQT reads QuestTrail's own data, not a public API, so a QuestTrail update can stop it. DQT then follows your quest focus, and the macro keeps working.
 
 ### Works with Questie, TomTom, Zygor, RestedXP, and QuestTrail
 All five are optional, and their settings are together under "Integrations (Experimental)". A setting whose AddOn is missing is greyed out. Use these with caution: they use the other AddOns' own code or data, not a public API.
