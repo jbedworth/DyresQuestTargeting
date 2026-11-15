@@ -8,4 +8,7 @@
     <Binding name="DQT_REMOVE_TARGET" category="ADDONS">
         SlashCmdList.DYRESQUESTTARGETING("remove")
     </Binding>
+    <Binding name="DQT_RESYNC" category="ADDONS">
+        SlashCmdList.DYRESQUESTTARGETING("resync")
+    </Binding>
 </Bindings>

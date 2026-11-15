@@ -3,6 +3,13 @@
 Player-facing changes for each Dyre's Quest Targeting release, newest first. The
 release builder puts the matching section at the top of each release's notes.
 
+## 1.5.0
+
+### Features
+
+- "Active guide" in the settings: choose which focus drives the macro. Most Recent Focus (the default) works as before. Choose Questie to follow your quest focus only, or Zygor, RestedXP, or QuestTrail to follow that guide's step: each new step then also focuses its quest in Questie's tracker, and the quest Questie focuses by itself when you accept a quest no longer takes the macro away from your guide. A quest you focus yourself wins until the guide's next step. Experimental: it uses the guides' and Questie's own code, not a public API.
+- Re-sync with your active guide: a button on the Quest Target Box header, `/dqt resync`, and a key binding take the macro and Questie's focus back to the guide's current step.
+
 ## 1.4.1
 
 The QuestTrail support is new and in beta. Please tell us how it works for you, and what goes wrong, in the comments on CurseForge or in an issue on GitHub.

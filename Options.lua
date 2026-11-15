@@ -327,6 +327,30 @@ function DQT.InitializeOptions()
             .. "objective, the turn-in, or who gives the quest. Whichever focus changed last wins; a new step counts "
             .. "as a change. QuestTrail's own compass is left alone. Experimental: it reads QuestTrail's own data, "
             .. "not a public API. Use with caution." .. NEEDS_QTR), QuestTrailLoaded)
+    -- Which focus drives DQT (author-approved, 2026-11-14). The list, read each time
+    -- it opens, has "Most Recent Focus" and the AddOns installed and followed; a saved
+    -- choice that is not stays listed, and counts as "Most Recent Focus".
+    local activeGuide = Proxy("DQT_ACTIVE_GUIDE", Settings.VarType.String, "Active guide", "recent",
+        function() return DQT.db.activeGuide end,
+        function(value) DQT.SelectGuide(value) end)
+    Dropdown(activeGuide, function()
+        local container = Settings.CreateControlTextContainer()
+        for _, key in ipairs(DQT.ACTIVE_GUIDE_ORDER) do
+            local label = DQT.ACTIVE_GUIDE_LABELS[key]
+            if DQT.ActiveGuideOn(key) then
+                container:Add(key, label)
+            elseif key == DQT.db.activeGuide then
+                container:Add(key, label .. " (not loaded or not followed)")
+            end
+        end
+        return container:GetData()
+    end, "Which focus drives the macro. Most Recent Focus (the default): whichever changed last, Questie's "
+        .. "tracker, the game's quest log or map, or a guide's new step. Questie: your quest focus only; guide "
+        .. "steps are ignored. Zygor, RestedXP, or QuestTrail: that guide's current step, and each new step also "
+        .. "focuses its quest in Questie's tracker. A quest you focus yourself wins until the guide's next step or "
+        .. "a re-sync (the box's button, /dqt resync, or its key binding). The quest Questie and the game focus by "
+        .. "themselves when you accept a quest is ignored. Lists only the AddOns installed and followed above. "
+        .. "Experimental: it uses the guides' and Questie's own code, not a public API. Use with caution.")
     Needs(Flag("DQT_SYNC_FOCUS", "Keep Questie's and the game's focus in sync", "syncFocus", false,
         "With Questie installed: focusing a quest in Questie's tracker also focuses it in the game's quest "
             .. "log and map, and the other way round. A Questie objective focus gives the game its quest. "

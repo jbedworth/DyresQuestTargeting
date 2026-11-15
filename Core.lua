@@ -125,7 +125,7 @@ end
 -- files otherwise fails silently, because the client hides Lua errors by default.
 local REQUIRED_NAMESPACE = {"ParseCommand", "HandleCommand", "FocusedQuest", "GameFocusChanged", "WorldLoading",
     "WorldEntered", "HookQuestieFocus", "QuestieFocusAvailable", "HookZygor", "ZygorAvailable", "HookRxp", "RxpAvailable",
-    "HookQuestTrail", "QuestTrailAvailable",
+    "HookQuestTrail", "QuestTrailAvailable", "QuestAccepted", "ActiveGuide", "SelectGuide", "Resync", "ResyncAvailable",
     "SyncFocus",
     "PointTomTom",
     "ReportQuestDebug", "BuildMacro",
@@ -169,6 +169,14 @@ function DQT.CanFollowQuests()
     return DQT.HasGameFocus() or DQT.QuestieFocusAvailable() or DQT.ZygorAvailable() or DQT.RxpAvailable()
         or DQT.QuestTrailAvailable()
 end
+
+-- "Active guide" (db.activeGuide, author-approved, 2026-11-14): which focus drives
+-- DQT. "recent", the most recent focus change (the default, and the only behavior before), or one
+-- AddOn: its focus or step drives DQT, and a guide's new step also focuses its quest
+-- in Questie's tracker. The settings list only those installed and on.
+DQT.ACTIVE_GUIDE_ORDER = {"recent", "questie", "rxp", "zygor", "qtr"}
+DQT.ACTIVE_GUIDE_LABELS = {recent = "Most Recent Focus", questie = "Questie", rxp = "RestedXP", zygor = "Zygor",
+    qtr = "QuestTrail"}
 
 -- How a focus is named in chat and the box: its own name, else the game's focus.
 function DQT.ViaName(quest, gameName)
@@ -312,6 +320,9 @@ function DQT.SanitizeDB(db)
     end
     if type(db.qtrFocus) ~= "boolean" then
         db.qtrFocus = true
+    end
+    if not DQT.ACTIVE_GUIDE_LABELS[db.activeGuide] then
+        db.activeGuide = "recent"
     end
     -- Both change other AddOns' state, so they are opt-in.
     if type(db.syncFocus) ~= "boolean" then
@@ -462,7 +473,7 @@ function DQT.Refresh()
     DQT.WriteMacro(built.body)
     Announce(quest, built)
     -- After the macro, so a change in Questie's private code cannot stop it.
-    DQT.SyncFocus()
+    DQT.SyncFocus(quest)
     DQT.PointTomTom(quest, built.kept)
     DQT.UpdateBox()
 end
@@ -680,13 +691,14 @@ SLASH_DYRESQUESTTARGETING1 = PRIMARY_SLASH
 SLASH_DYRESQUESTTARGETING2 = BACKUP_SLASH
 SlashCmdList[SLASH_KEY] = function(message) DQT.HandleCommand(message) end
 
--- Key bindings (Bindings.xml, author-approved, 1.4.0): each runs a /dqt command
+-- Key bindings (Bindings.xml, author-approved, 1.4.1): each runs a /dqt command
 -- through the slash handler above, so it has the same checks, also in combat.
 -- The game reads these names when it shows its Key Bindings list.
 BINDING_HEADER_DYRESQUESTTARGETING = "Dyre's Quest Targeting"
 BINDING_NAME_DQT_ADD_TARGET = "Add target to the hit list"
 BINDING_NAME_DQT_ADD_TARGET_EXACT = "Add target to the hit list (exact name)"
 BINDING_NAME_DQT_REMOVE_TARGET = "Remove target from the hit list"
+BINDING_NAME_DQT_RESYNC = "Re-sync with your active guide"
 
 local function LoadDB()
     DyresQuestTargetingDB = DQT.SanitizeDB(DyresQuestTargetingDB)
@@ -726,6 +738,8 @@ events:SetScript("OnEvent", function(self, event, firstArg)
     if event ~= "PLAYER_LOGIN" then
         if event == FOCUS_EVENT then
             DQT.GameFocusChanged()
+        elseif event == "QUEST_ACCEPTED" then
+            DQT.QuestAccepted()
         end
         DQT.RequestRefresh()
         return

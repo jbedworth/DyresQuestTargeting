@@ -202,7 +202,16 @@ local function fixture(options)
         local char = {TrackerFocus = options.questie.focus}
         env.Questie = {db = {char = char}}
         local utils = {}
-        function utils:FocusQuest(questID) char.TrackerFocus = questID return true end
+        state.questieFocusCalls = 0
+        function utils:FocusQuest(questID)
+            state.questieFocusCalls = state.questieFocusCalls + 1
+            char.TrackerFocus = questID
+            -- Questie 12.9.0 (TrackerUtils.lua): the game's focus too.
+            if options.questie.superTrack and env.C_SuperTrack.GetSuperTrackedQuestID() ~= questID then
+                env.C_SuperTrack.SetSuperTrackedQuestID(questID)
+            end
+            return true
+        end
         function utils:FocusObjective(questID, index) char.TrackerFocus = questID .. " " .. index return true end
         function utils:UnFocus() char.TrackerFocus = nil end
         -- TomTom targets as Questie sets them: the quest's nearest spawn, or a point.
@@ -667,6 +676,16 @@ local function fixture(options)
     function state.slash(text)
         env.SlashCmdList.DYRESQUESTTARGETING(text)
     end
+    function state.accept(questID, quest)
+        state.quests[questID] = quest
+        if not state.focus or state.focus == 0 then
+            env.C_SuperTrack.SetSuperTrackedQuestID(questID)
+            if state.questieUtils and env.Questie.db.char.TrackerFocus ~= questID then
+                state.questieUtils:FocusQuest(questID)
+            end
+        end
+        state.emit("QUEST_ACCEPTED", questID)
+    end
     function state.last() return state.messages[#state.messages] end
     function state.said(fragment)
         for _, message in ipairs(state.messages) do
@@ -693,7 +712,7 @@ local CONDOR_QUEST = {[101] = {title = "The Condor Hunt", objectives = {
 
 test("logs in with a banner and makes the character macro", function()
     local state = fixture()
-    contains(state.messages[1], "DQT: Dyre's Quest Targeting 1.4.1 by Dyre")
+    contains(state.messages[1], "DQT: Dyre's Quest Targeting 1.5.0 by Dyre")
     equal(state.said("Ready."), true)
     equal(state.dqt.available, true)
     contains(state.macro(), "nothing to target")
@@ -940,8 +959,8 @@ test("every integration setting sits under the experimental Integrations heading
     for index, object in ipairs(list) do
         if object.header == "Integrations (Experimental)" then heading = index end
     end
-    local INTEGRATIONS = {"DQT_QUESTIE_FOCUS", "DQT_ZYGOR_FOCUS", "DQT_RXP_FOCUS", "DQT_QTR_FOCUS", "DQT_SYNC_FOCUS",
-        "DQT_TOMTOM"}
+    local INTEGRATIONS = {"DQT_QUESTIE_FOCUS", "DQT_ZYGOR_FOCUS", "DQT_RXP_FOCUS", "DQT_QTR_FOCUS", "DQT_ACTIVE_GUIDE",
+        "DQT_SYNC_FOCUS", "DQT_TOMTOM"}
     for offset, variable in ipairs(INTEGRATIONS) do
         equal(list[heading + offset].setting.variable, variable)
     end
@@ -1351,9 +1370,9 @@ local function bindings()
     return found
 end
 
-test("key bindings: add, add exact, and remove the target, through /dqt; each is named", function()
+test("key bindings: add, add exact, and remove the target, and re-sync, through /dqt; each is named", function()
     local found = bindings()
-    equal(#found, 3)
+    equal(#found, 4)
     equal(found[1].header, "DYRESQUESTTARGETING", "one header, on the first")
     local state = fixture()
     equal(state.env.BINDING_HEADER_DYRESQUESTTARGETING, "Dyre's Quest Targeting")
@@ -1380,6 +1399,8 @@ test("key bindings: add, add exact, and remove the target, through /dqt; each is
     run.DQT_ADD_TARGET()
     equal(state.env.DyresQuestTargetingDB.added[2].name, "Kobold", "in combat the hit list changes at once")
     lacks(state.macro(), "Kobold", "the macro waits for the end of combat")
+    run.DQT_RESYNC()
+    contains(state.last(), "DQT: Re-sync needs an active guide", "as /dqt resync")
 end)
 
 test("names with ; or too long to fit are refused", function()
@@ -1863,7 +1884,8 @@ test("box: a toolkit widget, a rounded panel with a thin gold edge and a rounded
     end
     for _, child in ipairs(header.children) do
         if child.kind == "Button" then
-            equal(child == header.fold or child == header.remove, true, "the header's one button: fold")
+            equal(child == header.fold or child == header.remove or child == header.resync, true,
+                "the header's buttons: fold, and re-sync")
         end
     end
     equal(box.shown, true)
@@ -3457,6 +3479,133 @@ test("questtrail: \"on the way\" objectives come before the step's, all on the r
     state.qtr.Arrow.SavePlan()
     state.advance()
     lacks(state.macro(), "Boar", "a step DQT cannot follow brings no \"on the way\" names alone")
+end)
+
+local KOBOLDS = {title = "Kobolds", objectives = {objective("Kobold slain: 0/5")}}
+
+-- The choices the "Active guide" dropdown lists now.
+local function guideChoices(state)
+    local labels = {}
+    for _, choice in ipairs(settingRow(state, "DQT_ACTIVE_GUIDE").options()) do labels[#labels + 1] = choice.label end
+    return table.concat(labels, ", ")
+end
+
+test("active guide: Most Recent Focus is the default, so the focus Questie sets on accept still wins", function()
+    local state = fixture({quests = {[1] = TWO_QUESTS[1], [2] = TWO_QUESTS[2]}, questie = {superTrack = true},
+        zygor = {step = zygorStepThree()}})
+    equal(state.env.DyresQuestTargetingDB.activeGuide, "recent")
+    contains(state.macro(), "/targetexact Gnoll Runt")
+    state.focus = 0
+    state.accept(3, KOBOLDS)
+    state.advance()
+    contains(state.macro(), "/targetexact Kobold", "as before: the newest focus change wins")
+    equal(boxRows(state)[1].resync.shown, false, "no re-sync button")
+end)
+
+test("active guide: Zygor's step drives the macro and Questie's focus; the focus on accept is ignored", function()
+    local state = fixture({quests = {[1] = TWO_QUESTS[1], [2] = TWO_QUESTS[2]}, questie = {focus = 1, superTrack = true},
+        saved = {activeGuide = "zygor"}, zygor = {step = zygorStepThree()}})
+    contains(state.macro(), "/targetexact Gnoll Runt", "Zygor's step at login")
+    equal(state.env.Questie.db.char.TrackerFocus, 2, "the step's quest goes to Questie's tracker")
+    equal(state.focus, 2, "and Questie sets the game's focus to it")
+    equal(state.notes, 1, "as Questie's tracker menu does")
+    state.clear()
+    state.focus = 0
+    state.accept(3, KOBOLDS)
+    state.advance()
+    contains(state.macro(), "/targetexact Gnoll Runt", "the automatic focus on accept is ignored")
+    lacks(state.macro(), "Kobold")
+    equal(state.env.Questie.db.char.TrackerFocus, 2, "and undone: Zygor's quest goes back to Questie")
+    equal(state.said("Focused quest changed"), false, "no change to announce")
+    state.advance(5)
+    state.questieUtils:FocusQuest(3)
+    state.advance()
+    contains(state.macro(), "/targetexact Kobold", "a quest you focus yourself wins")
+    equal(state.env.Questie.db.char.TrackerFocus, 3, "and stays in Questie's tracker")
+    state.zygorSend("ZGV_GOAL_PROGRESS", 3, 2)
+    state.advance()
+    contains(state.macro(), "/targetexact Kobold", "until the next step: progress is not one")
+    local four = zstep(4, {zgoal({action = "kill", target = "Murloc Forager", questid = 1})})
+    state.zygorStep(four)
+    state.advance()
+    contains(state.macro(), "/targetexact Murloc Forager", "Zygor's next step takes over again")
+    equal(state.env.Questie.db.char.TrackerFocus, 1, "its quest goes to Questie's tracker")
+    state.questieUtils:FocusQuest(3)
+    state.advance()
+    contains(state.macro(), "/targetexact Kobold")
+    state.clear()
+    state.slash("resync")
+    contains(state.macro(), "/targetexact Murloc Forager", "re-sync: Zygor's current step again")
+    equal(state.env.Questie.db.char.TrackerFocus, 1, "and its quest in Questie's tracker")
+    equal(state.said("DQT: Re-synced with Zygor's current step."), true)
+end)
+
+test("active guide: the box's re-sync button shows only with a guide chosen; the setting lists what is followed",
+    function()
+    local state = fixture({quests = THREE_QUESTS, questie = {}, zygor = {step = zygorStepThree()},
+        rxp = {steps = {}}, db = RXP_DB})
+    equal(guideChoices(state), "Most Recent Focus, Questie, RestedXP, Zygor")
+    local header = boxRows(state)[1]
+    equal(header.resync.shown, false, "Most Recent Focus: no button")
+    state.settings.DQT_ACTIVE_GUIDE:SetValue("zygor")
+    equal(header.resync.shown, true, "a guide chosen")
+    contains(header.resync.tip, "Re-sync with Zygor: ", "the tip names the guide")
+    state.settings.DQT_ACTIVE_GUIDE:SetValue("rxp")
+    contains(header.resync.tip, "Re-sync with RestedXP: ")
+    state.settings.DQT_ACTIVE_GUIDE:SetValue("zygor")
+    state.questieUtils:FocusQuest(3)
+    state.advance()
+    contains(state.macro(), "/targetexact Kobold")
+    header.resync:Click()
+    contains(state.macro(), "/targetexact Gnoll Runt", "the button re-syncs")
+    state.settings.DQT_ACTIVE_GUIDE:SetValue("questie")
+    equal(header.resync.shown, false, "Questie chosen: no button")
+    state.settings.DQT_ZYGOR_FOCUS:SetValue(false)
+    state.env.DyresQuestTargetingDB.activeGuide = "zygor"
+    equal(guideChoices(state), "Most Recent Focus, Questie, RestedXP, Zygor (not loaded or not followed)",
+        "a saved choice not followed stays listed")
+    equal(state.dqt.ActiveGuide(), "recent", "and counts as Most Recent Focus")
+    state.slash("resync")
+    contains(state.last(), "Re-sync needs an active guide")
+end)
+
+test("active guide: Questie chosen ignores guide steps; RestedXP chosen ignores Zygor's", function()
+    local state = fixture({quests = THREE_QUESTS, questie = {focus = 1}, saved = {activeGuide = "questie"},
+        zygor = {step = zygorStepThree()}})
+    contains(state.macro(), "/targetexact Boar", "Questie's focus, not Zygor's step, at login")
+    state.zygorStep(zstep(4, {zgoal({action = "kill", target = "Murloc Forager", questid = 2})}))
+    state.advance()
+    contains(state.macro(), "/targetexact Boar", "a new Zygor step is ignored")
+    lacks(state.macro(), "Murloc")
+    local rxp = fixture({quests = THREE_QUESTS, questie = {focus = 1}, db = RXP_DB, saved = {activeGuide = "rxp"},
+        rxp = {steps = {rxpStepThree()}}, zygor = {step = zygorStepThree()}})
+    contains(rxp.macro(), "/targetexact Zenn Foulhoof", "RestedXP's step at login, not Zygor's")
+    lacks(rxp.macro(), "Marshal McBride")
+    rxp.zygorStep(zstep(4, {zgoal({action = "kill", target = "Murloc Forager", questid = 2})}))
+    rxp.advance()
+    lacks(rxp.macro(), "Murloc", "Zygor's new step is ignored")
+    equal(rxp.env.Questie.db.char.TrackerFocus, 2, "RestedXP's quest goes to Questie's tracker")
+end)
+
+test("active guide: QuestTrail's step drives Questie's focus; a focus while the world loads is no change", function()
+    local state = qtrState({focus = 1, questie = {focus = 1}, saved = {activeGuide = "qtr"}})
+    state.qtrStep({kind = "progress", q = 2, oi = 2})
+    state.advance()
+    contains(state.macro(), "/targetexact Bear")
+    equal(state.env.Questie.db.char.TrackerFocus, 2, "the step's quest goes to Questie's tracker")
+    local calls = state.questieFocusCalls
+    state.qtrStep({kind = "progress", q = 2, oi = 2})
+    state.advance()
+    equal(state.questieFocusCalls, calls, "the same step is not pushed again")
+    state.emit("PLAYER_LEAVING_WORLD")
+    state.questieUtils:FocusQuest(1)
+    state.emit("PLAYER_ENTERING_WORLD")
+    state.advance(3)
+    contains(state.macro(), "/targetexact Bear", "Questie restoring its focus while loading is not yours")
+    state.clear()
+    state.slash("resync")
+    equal(state.env.Questie.db.char.TrackerFocus, 2, "re-sync puts the step's quest back")
+    equal(state.said("Re-synced with QuestTrail's current step."), true)
 end)
 
 local function zway(x, y, fields)

@@ -6,7 +6,7 @@ Dyre's Quest Targeting (DQT, `/dqt`) is a World of Warcraft: Forever AddOn
 that keeps one targeting macro up to date with the quest you are working on.
 It began as the one RestedXP (RXP) feature the author still wanted, built from
 Forever's own quest journal instead of a guide; since 1.3.0 it can also follow
-a Zygor or RestedXP step, and since 1.4.0 a QuestTrail step. Keep this feature set; do not add speculative features
+a Zygor or RestedXP step, and since 1.4.1 a QuestTrail step. Keep this feature set; do not add speculative features
 or frameworks without agreement.
 
 Naming (author-approved): the title starts with "Dyre's", so players can find
@@ -314,7 +314,7 @@ not a public API. Tests mock only its fields, with no guide text.
   same (source only; RestedXP is not installed in `_classic_era_`). A guide
   counts for `DQT.CanFollowQuests`, so RestedXP without Questie follows its step.
 
-### With QuestTrail (built 1.4.0; author-approved, 2026-11-10)
+### With QuestTrail (built 1.4.1; author-approved, 2026-11-10)
 
 A player asked: DQT "picks up the focus quest targets but not the targets for the
 'on the way' quests", which they added to the hit list by hand. Source verified in
@@ -327,7 +327,7 @@ Camelot TOC); private fields, not a public API. Tests mock only its fields.
   library QuestTrail hands its own modules (Core/QuestTrail_API.lua).
   `DQT.QuestTrailAvailable`: that `ns` with an `Arrow` table.
 - It already sets the game's focus to its step's quest (`ns.Focus.Set`,
-  UI/QuestTrail_Pins.lua:736; 0 for a quest not in the log), so before 1.4.0 DQT
+  UI/QuestTrail_Pins.lua:736; 0 for a quest not in the log), so before 1.4.1 DQT
   followed the quest, not the step. "Follow QuestTrail's current step"
   (`db.qtrFocus`, default on, greyed without it) adds the step: kinds "progress"
   (that objective, `oi`, with `ObjectiveTargets`; every open one without it),
@@ -359,6 +359,51 @@ Camelot TOC); private fields, not a public API. Tests mock only its fields.
   does), since Questie's own calls are not silent. Never at login: QuestTrail
   restores its last plan then, and its first new plan can come a minute later.
 
+### Active guide (built, not released; author-approved, 2026-11-14)
+
+Author (bug): "Questie now sets the focus quest whenever you accept a quest, and
+this overwrites the integration's RXP/Zygor step. If Zygor/RXP/QuestTrail
+integration is enabled, we should be using that to drive Questie's focus quest."
+Cause: the newest focus change won (Quest.lua `guideFocus`), and the focus on
+accept is a new change. Source: the game focuses a quest you accept when nothing is
+focused (`QuestUtil.CheckAutoSuperTrackQuest`, Blizzard_FrameXMLUtil
+Mainline/QuestUtils.lua:440, from Blizzard_QuestSuperTracking.lua's QUEST_ACCEPTED
+handler; the TOC loads it for mainline, which includes Camelot), and Questie 12.9.0's
+"Follow Blizzard Super Tracking" (`trackerFollowSuperTracking`, default off,
+Modules/Tracker/TrackerSuperTrack.lua:18-39) then calls `TrackerUtils:FocusQuest`,
+which DQT hooks. Questie itself has no focus code on QUEST_ACCEPTED; that option is
+the setting that turns it off. Both happen in the same frame (0 s; not timed in
+client). Questie 12.9.0's `FocusQuest` also sets the game's focus
+(TrackerUtils.lua:635-647), and it has no objective focus any more (a saved
+"questID objectiveIndex" is cleared; `FocusObjective` is gone, so its hook is skipped).
+
+- "Active guide" (`db.activeGuide`, a dropdown under the Integrations heading, after
+  the four Follow switches): "recent", "Most Recent Focus" (author's label; the
+  default, the behavior before it), then only the AddOns installed and followed:
+  Questie, RestedXP, Zygor, QuestTrail (`DQT.ActiveGuideOn`). A saved choice not
+  installed or not followed stays listed "(not loaded or not followed)" and counts
+  as "recent" (`DQT.ActiveGuide`). Repaired on load.
+- A guide chosen: only its steps drive DQT (`GuideAllowed`; at login only its step);
+  each new step, while it is in charge, focuses the step's quest in your log in
+  Questie's tracker (`DriveQuestie`: `TrackerUtils:FocusQuest`, then
+  `QuestieQuest:ToggleNotes(false)`), once per step key. Questie chosen: no guide
+  step drives DQT; the quest focus does, as before.
+- A Questie or game focus change while a guide is chosen is decided at the next
+  rebuild (`DecidePendingFocus`), because the automatic focus can come before DQT
+  sees QUEST_ACCEPTED. Yours wins until the guide's next step or a re-sync (no way
+  to tell a click from another AddOn's call). Not yours: a change within 1 s
+  (`AUTO_FOCUS_WINDOW`, author-approved "about 1 s") of QUEST_ACCEPTED, which is also
+  undone (the guide's quest goes back to Questie); a focus on a quest of a guide's
+  step (`GuideHasQuest`: the guides and DQT set those); an unfocus; and Questie
+  restoring its focus while the world loads.
+- "Keep Questie's and the game's focus in sync" works as before; the automatic
+  focus is not copied. With Questie 12.9.0 the guide's push sets both sides.
+- QuestTrail drives Questie's focus the same way (its step's quest, `step.q`).
+- Re-sync (`DQT.Resync`): the box's header button (`UI-RefreshButton`, left of the
+  fold button, shown only while a guide is chosen), `/dqt resync`, and the key
+  binding "Re-sync with your active guide". It makes the guide the latest focus and
+  pushes its quest again. Choosing a guide in the setting does the same, silently.
+
 ### With Questie installed (built; author-approved, both default off)
 
 Both are marked experimental (author): under the settings section heading
@@ -371,8 +416,9 @@ safety check and changes no name.
 That heading holds every setting for another AddOn (author, 1.3.0, renamed
 from "Questie Synchronization": "I had a hard time finding the setting"),
 in this order: "Follow Questie's tracker focus", "Follow Zygor's current
-step", "Follow RestedXP's current step", "Follow QuestTrail's current step", "Keep
-Questie's and the game's focus in sync", and "Point TomTom at the focused quest". Above it, the macro's own settings: the switch, the
+step", "Follow RestedXP's current step", "Follow QuestTrail's current step", "Active
+guide", "Keep Questie's and the game's focus in sync", and "Point TomTom at the focused
+quest". Above it, the macro's own settings: the switch, the
 markers, the opener, and the account-wide macro. Only the place changed:
 saved keys, defaults, greying, and dependencies stay.
 
@@ -570,11 +616,11 @@ minimap menu, and widgets (contract 2). The Quest Target box is a widget.
 
 ### Commands
 
-- Key bindings (author-approved, 1.4.0): Bindings.xml, header
+- Key bindings (author-approved, 1.4.1): Bindings.xml, header
   "Dyre's Quest Targeting" (category ADDONS, as Dyre's Tank Tools), with "Add
-  target to the hit list", "Add target to the hit list (exact name)", and "Remove
-  target from the hit list". Each runs `SlashCmdList.DYRESQUESTTARGETING` with
-  `add`, `add_exact`, or `remove`, so it has the same checks and works in combat;
+  target to the hit list", "Add target to the hit list (exact name)", "Remove
+  target from the hit list", and "Re-sync with your active guide". Each runs
+  `SlashCmdList.DYRESQUESTTARGETING` with `add`, `add_exact`, `remove`, or `resync`, so it has the same checks and works in combat;
   no new global and no button click (`/click` does not press AddOn buttons). The
   `BINDING_` names are set in Core.lua. The game reads Bindings.xml by name, so the
   TOC does not list it.
@@ -582,7 +628,7 @@ minimap menu, and widgets (contract 2). The Quest Target box is a widget.
   so), as `/dqt options` does. `/dqt list` lists the focused quest, the names
   most wanted first with where each came from (and drop rates), names left
   out, and whether QuestieDB is loaded. `add`, `add_exact`, `remove`,
-  `reset` (the hit list), `on`, `off` (the macro switch), `unlock` and `lock`
+  `reset` (the hit list), `on`, `off` (the macro switch), `resync` (the active guide), `unlock` and `lock`
   (the toolkit's `Unlock`/`Lock`, as `/mtf` and `/dbr`: the toolkit's one
   `Dyre:` line, no DQT line), `reset_box` (`ResetWidgets`; not `reset`, which
   already clears the hit list), `debug` (runs even when DQT is unavailable). Backup slash `/questtargeting`; a clash on `/dqt` is
@@ -635,7 +681,7 @@ minimap menu, and widgets (contract 2). The Quest Target box is a widget.
   the in-game AddOn list. Its `## Category: Quests` groups it only when the
   toolkit is missing; keep that identical to the CurseForge main category,
   because the list groups by exact text.
-- No runtime assets besides Bindings.xml (author-approved, 1.4.0). Add none
+- No runtime assets besides Bindings.xml (author-approved, 1.4.1). Add none
   without agreement.
 - Git origin: git@github.com:jbedworth/DyresQuestTargeting.git (public, as
   all of the author's AddOns). Inspect Git state before acting and preserve

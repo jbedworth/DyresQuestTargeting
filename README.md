@@ -95,6 +95,7 @@ front of you.
 | `/dqt remove [name]` | Takes one name off your hit list |
 | `/dqt reset` | Clears your hit list (the box stays where it is; `/dqt reset_box` moves it back) |
 | `/dqt on`, `/dqt off` | Turns updating the macro on or off; off leaves it as it is |
+| `/dqt resync` | Goes back to your active guide's current step (see "Active guide") |
 | `/dqt unlock`, `/dqt lock` | Unlocks or locks frames to move the Quest Target box, as `/dyre unlock` and `/dyre lock` do for every Dyre's AddOn |
 | `/dqt reset_box` | Puts the Quest Target box back in its first place |
 | `/dqt options` | Opens the settings, as `/dqt` does |
@@ -104,9 +105,9 @@ front of you.
 
 Key bindings: under Options > Key Bindings > AddOns > Dyre's Quest Targeting,
 bind "Add target to the hit list", "Add target to the hit list (exact name)",
-and "Remove target from the hit list". Each does what `/dqt add`, `/dqt
-add_exact`, or `/dqt remove` does with no name typed, also in combat (the macro
-then updates after combat).
+"Remove target from the hit list", and "Re-sync with your active guide". Each
+does what `/dqt add`, `/dqt add_exact`, `/dqt remove`, or `/dqt resync` does with
+no name typed, also in combat (the macro then updates after combat).
 
 ## The Quest Target box
 
@@ -266,6 +267,29 @@ for the plan QuestTrail restores at login.
 **Experimental: use it with caution.** It reads QuestTrail's own data, not a
 public API, so a QuestTrail update can stop it; DQT then follows your quest
 focus, and the macro keeps working.
+
+## Active guide
+
+By default, the focus that changed last drives the macro: Questie's tracker, the
+game's quest log or map, or a guide's new step. Recent Questie versions, with
+their "Follow Blizzard Super Tracking" option on, focus a quest when you accept
+it (the game focuses it when nothing else is), and that took the macro away from
+your guide's step. "Active guide" (under "Integrations (Experimental)") picks one
+instead:
+
+- **Most Recent Focus** (the default): as above.
+- **Questie**: your quest focus only; guide steps are ignored.
+- **Zygor**, **RestedXP**, or **QuestTrail**: that guide's current step drives the
+  macro, and each new step also focuses its quest in Questie's tracker. A quest
+  you focus yourself, in Questie's tracker or the game's quest log, wins until the
+  guide's next step. The focus Questie and the game set by themselves when you
+  accept a quest is ignored, and the guide's quest goes back to Questie's tracker.
+
+The list shows only the AddOns you have installed and follow. With a guide
+chosen, the box's header has a re-sync button (the round arrow), and `/dqt resync`
+and a key binding do the same: back to the guide's current step, and its quest in
+Questie's tracker. **Experimental: use it with caution.** It uses the guides' and
+Questie's own code, not a public API.
 
 ## How it works, and its limits
 

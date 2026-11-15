@@ -62,6 +62,15 @@ local INPUT_PROMPT_EXACT = "Mob name to add (exact name)"
 local INPUT_ROW = 20
 local CLEAR_TIP = "Clear the hit list."
 local HIT_LIST_TIP = "Show or hide the hit list."
+-- Names the active guide (John, 2026-11-14: "can we make it say 'Re-sync with
+-- {Questie|Rested XP|...}' instead of the generic 'active guide'?"); %s is its
+-- label (Core.lua's ACTIVE_GUIDE_LABELS).
+local RESYNC_TIP = "Re-sync with %s: target its current step again, and focus its quest in Questie's tracker."
+
+local function ResyncTip()
+    local label = DQT.ACTIVE_GUIDE_LABELS[DQT.db.activeGuide] or "your active guide"
+    return string.format(RESYNC_TIP, label)
+end
 -- The empty strip above the footer (room to drop a dragged name last), in
 -- bar heights (author: "a little extra space at the bottom").
 local STRIP_FACTOR = 0.5
@@ -73,6 +82,8 @@ local RATE_WIDTH = 3.4
 local REMOVE_TEXTURE = "Interface\\Buttons\\UI-GroupLoot-Pass-Up"
 local EXPAND_TEXTURE = "Interface\\Buttons\\UI-PlusButton-Up"
 local COLLAPSE_TEXTURE = "Interface\\Buttons\\UI-MinusButton-Up"
+-- The refresh arrow (IconButtonTemplate.xml uses it in every client).
+local RESYNC_TEXTURE = "Interface\\Buttons\\UI-RefreshButton"
 -- No drop rate known, so "no data" and "cut off" differ.
 local NO_RATE = "-"
 local DEFAULT_FONT = "Fonts\\FRIZQT__.TTF"
@@ -562,6 +573,14 @@ local function Render()
     header:SetHeight(headerHeight)
     header.fold:SetSize(icon, icon)
     header.fold:SetNormalTexture(AllFolded() and EXPAND_TEXTURE or COLLAPSE_TEXTURE)
+    -- Re-sync, left of the fold button, only while a guide is the active guide.
+    local resync = DQT.ResyncAvailable()
+    header.resync:SetSize(icon, icon)
+    header.resync:SetShown(resync)
+    header.resync.tip = ResyncTip()
+    header.label:ClearAllPoints()
+    header.label:SetPoint("LEFT", header, "LEFT", PADDING - BORDER_INSET, 0)
+    header.label:SetPoint("RIGHT", resync and header.resync or header.fold, "LEFT", -BUTTON_GAP, 0)
     local text, plain = HeaderText()
     header.full = plain
     SetFontSize(header.label, size)
@@ -809,6 +828,15 @@ function DQT.CreateBox()
     header.fold = CreateFrame("Button", nil, header)
     header.fold:SetPoint("RIGHT", header, "RIGHT", BORDER_INSET - PADDING, 0)
     header.fold:SetScript("OnClick", ToggleAll)
+    header.resync = CreateFrame("Button", nil, header)
+    header.resync:SetPoint("RIGHT", header.fold, "LEFT", -BUTTON_GAP, 0)
+    header.resync.icon = header.resync:CreateTexture(nil, "ARTWORK")
+    header.resync.icon:SetAllPoints()
+    header.resync.icon:SetTexture(RESYNC_TEXTURE)
+    header.resync.tip = ResyncTip()
+    header.resync:SetScript("OnEnter", ShowTip)
+    header.resync:SetScript("OnLeave", HideFull)
+    header.resync:SetScript("OnClick", function() DQT.Resync() end)
     header.label:SetPoint("LEFT", header, "LEFT", PADDING - BORDER_INSET, 0)
     header.label:SetPoint("RIGHT", header.fold, "LEFT", -BUTTON_GAP, 0)
     objectiveRow = Row(frame)

@@ -95,6 +95,7 @@ Each character has its own macro and its own hit list. Short of character macro 
 All five are optional, and their settings are together under "Integrations (Experimental)". A setting whose AddOn is missing is greyed out. Use these with caution: they use the other AddOns' own code or data, not a public API.
 - Follow Questie's tracker focus (on by default): DQT follows the quest you focus in the game's quest log or map, or in Questie's tracker, whichever you set last. Chat says when the focused quest changes. Without Questie it still targets kill objectives and your hit list.
 - Follow Zygor's current step, Follow RestedXP's current step, and Follow QuestTrail's current step (on by default): see above.
+- Active guide (Most Recent Focus by default): choose Questie, Zygor, RestedXP, or QuestTrail to drive the macro. With a guide, each new step also focuses its quest in Questie's tracker, and the quest Questie focuses by itself when you accept one is ignored. A re-sync button on the box, `/dqt resync`, and a key binding go back to the guide's step.
 - Keep Questie's and the game's focus in sync (off by default).
 - Point TomTom at the focused quest (off by default; needs TomTom, with Questie, Zygor, RestedXP, or QuestTrail): on a Zygor, RestedXP, or QuestTrail step with a location, points the TomTom arrow there and moves on with the guide's next waypoint. Otherwise, with Questie, it points at the nearest of the mobs and NPCs the macro looks for, or at the turn-in once the quest is done.
 
@@ -105,7 +106,7 @@ The Quest Target Box needs Dyre's Toolkit; the CurseForge app installs it with D
 - `/dqt` opens the settings.
 - `/dqt list` lists what the macro targets, most wanted first, and why.
 - `/dqt add [name]`, `/dqt add_exact [name]`, `/dqt remove [name]`, `/dqt reset` (clears the hit list).
-- Key bindings: add your target to the hit list, add it with its exact name, or remove it.
+- Key bindings: add your target to the hit list, add it with its exact name, remove it, or re-sync with your active guide.
 - `/dqt on`, `/dqt off`: turn updating the macro on or off.
 - `/dqt unlock`, `/dqt lock`: move the Quest Target Box (all Dyre's AddOns' frames, as `/dyre unlock` does); `/dqt reset_box` puts it back.
 - `/questtargeting` works the same, in case another AddOn uses `/dqt`.

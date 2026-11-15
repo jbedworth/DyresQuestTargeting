@@ -252,6 +252,18 @@ local restoring = {Zygor = true, RestedXP = true, QuestTrail = true}
 -- to the other; and the quest both last agreed on.
 local syncFrom
 local syncedID
+-- With a guide chosen as the active guide (db.activeGuide), a Questie or game focus
+-- change is decided at the next rebuild, not at once: the game focuses a quest you
+-- accept when nothing else is focused (QuestUtil.CheckAutoSuperTrackQuest, from
+-- Blizzard_QuestSuperTracking.lua's QUEST_ACCEPTED handler), and Questie's "Follow
+-- Blizzard Super Tracking" then focuses it in its tracker, in the same frame, perhaps
+-- before DQT sees QUEST_ACCEPTED. A change this close to QUEST_ACCEPTED is that
+-- automatic focus, not yours (author-approved: about 1 s; the source shows 0 s).
+local AUTO_FOCUS_WINDOW = 1
+local pendingFocus
+local acceptedAt
+-- The chosen guide's step whose quest DQT last focused in Questie's tracker.
+local pushedKey
 
 local function InLog(questID)
     return not DQT.IsSecret(questID) and type(questID) == "number" and questID > 0
@@ -504,7 +516,7 @@ local function RxpQuests()
     return quests
 end
 
--- QuestTrail's plan step (author-approved, 1.4.0; source verified in QuestTrail
+-- QuestTrail's plan step (author-approved, 1.4.1; source verified in QuestTrail
 -- 4.2.0): its compass's target, ns.Arrow.current, with a kind, a quest (q), and
 -- perhaps an objective (oi). QuestTrail gives its modules its namespace through
 -- LibStub("QuestTrail-Modules").ns (Core/QuestTrail_API.lua); private fields,
@@ -551,6 +563,57 @@ local function CurrentQtrKey()
     return step and QtrKey(step)
 end
 
+local GUIDE_NAMES = {zygor = "Zygor", rxp = "RestedXP", qtr = "QuestTrail"}
+
+-- A choice of "Active guide" is offered while its AddOn is installed and followed.
+function DQT.ActiveGuideOn(key)
+    local db = DQT.db
+    if key == "recent" then
+        return true
+    elseif key == "questie" then
+        return DQT.QuestieFocusAvailable() and (db.questieFocus or not DQT.HasGameFocus())
+    elseif key == "zygor" then
+        return DQT.ZygorAvailable() and db.zygorFocus
+    elseif key == "rxp" then
+        return DQT.RxpAvailable() and db.rxpFocus
+    elseif key == "qtr" then
+        return DQT.QuestTrailAvailable() and db.qtrFocus
+    end
+    return false
+end
+
+-- The choice in effect: a saved choice whose AddOn is missing or not followed
+-- counts as "recent" (its saved value stays).
+function DQT.ActiveGuide()
+    local key = DQT.db.activeGuide
+    if key ~= "recent" and DQT.ActiveGuideOn(key) then
+        return key
+    end
+    return "recent"
+end
+
+-- The chosen guide (Zygor, RestedXP, or QuestTrail), or nil.
+local function ChosenGuide()
+    local key = DQT.ActiveGuide()
+    return GUIDE_NAMES[key] and key or nil
+end
+
+-- A guide's step can drive DQT: with "recent", any guide's; with a guide chosen, only
+-- that guide's; with Questie chosen, none.
+local function GuideAllowed(name)
+    local key = DQT.ActiveGuide()
+    return key == "recent" or key == name
+end
+
+-- That guide's step counts now: it changed last (or it is login), and it may drive.
+local function GuideCounts(name)
+    return (guideFocus == name or guideFocus == "login") and GuideAllowed(name)
+end
+
+function DQT.QuestAccepted()
+    acceptedAt = GetTime()
+end
+
 -- SUPER_TRACKING_CHANGED: the game's focus wins only when you focus a
 -- different quest; the event also fires for map pins and other changes. A
 -- game focus on Questie's own quest keeps Questie's, so an objective focus
@@ -577,7 +640,11 @@ function DQT.GameFocusChanged()
             and not GuideHasQuest(questID) then
         focusSource = "game"
         syncFrom = "game"
-        guideFocus = nil
+        if ChosenGuide() then
+            pendingFocus = {at = GetTime(), source = "game"}
+        else
+            guideFocus = nil
+        end
     end
     lastGameID = questID
 end
@@ -591,7 +658,7 @@ end
 -- latest focus; goal progress on the same step only rebuilds.
 local function ZygorChanged()
     local key = CurrentZygorKey()
-    if key and key ~= lastZygorKey and not loading then
+    if key and key ~= lastZygorKey and not loading and GuideAllowed("zygor") then
         guideFocus = "zygor"
     end
     if key and lastZygorKey and key ~= lastZygorKey then
@@ -622,7 +689,7 @@ end
 local function NoteRxpStep()
     local key = CurrentRxpKey()
     if key and key ~= lastRxpKey then
-        if not loading then
+        if not loading and GuideAllowed("rxp") then
             guideFocus = "rxp"
         end
         if lastRxpKey then
@@ -636,7 +703,7 @@ end
 local function NoteQtrStep()
     local key = CurrentQtrKey()
     if key and key ~= lastQtrKey then
-        if not loading then
+        if not loading and GuideAllowed("qtr") then
             guideFocus = "qtr"
         end
         if lastQtrKey then
@@ -730,7 +797,11 @@ function DQT.HookQuestieFocus(onChange)
             hooksecurefunc(utils, name, function()
                 focusSource = "questie"
                 syncFrom = "questie"
-                guideFocus = nil
+                if ChosenGuide() then
+                    pendingFocus = {at = GetTime(), source = "questie", loading = loading}
+                else
+                    guideFocus = nil
+                end
                 onChange()
             end)
             hooked = true
@@ -1013,24 +1084,62 @@ local function QtrQuest(db)
     }
 end
 
+-- A Questie or game focus change made while a guide is chosen (author-approved): yours
+-- wins until the guide's next step or a re-sync; Questie restoring its focus while the
+-- world loads, the game's and Questie's automatic focus on a quest you accept, a focus
+-- on a quest of a guide's step (the guides, and DQT, set it), and an unfocus do not.
+-- The automatic focus is undone: the guide's quest goes back to Questie's tracker.
+local function DecidePendingFocus()
+    local change = pendingFocus
+    pendingFocus = nil
+    local guide = ChosenGuide()
+    if not change then
+        return
+    end
+    if not guide then
+        guideFocus = nil
+        return
+    end
+    if change.loading then
+        return
+    end
+    if acceptedAt and math.abs(change.at - acceptedAt) <= AUTO_FOCUS_WINDOW then
+        syncFrom = nil
+        if guideFocus == guide or guideFocus == "login" then
+            pushedKey = nil
+        end
+        return
+    end
+    local questID
+    if change.source == "questie" then
+        questID = QuestieFocus()
+    else
+        questID = GameFocus()
+    end
+    if questID and not GuideHasQuest(questID) then
+        guideFocus = nil
+    end
+end
+
 -- The focused quest and its targets, ordered least to most important, or nil.
 function DQT.FocusedQuest()
     local db = Database()
     NoteRxpStep()
     NoteQtrStep()
-    if guideFocus == "zygor" or guideFocus == "login" then
+    DecidePendingFocus()
+    if GuideCounts("zygor") then
         local zygor = ZygorQuest(db)
         if zygor then
             return zygor
         end
     end
-    if guideFocus == "rxp" or guideFocus == "login" then
+    if GuideCounts("rxp") then
         local rxp = RxpQuest(db)
         if rxp then
             return rxp
         end
     end
-    if guideFocus == "qtr" or guideFocus == "login" then
+    if GuideCounts("qtr") then
         local qtr = QtrQuest(db)
         if qtr then
             return qtr
@@ -1089,7 +1198,89 @@ end
 -- API. The game has no objective focus, so a Questie objective focus gives
 -- the game its quest. Unfocusing in Questie clears the game's focus when it
 -- is still the synced quest.
-function DQT.SyncFocus()
+-- The chosen guide's current step, as its own key.
+local function GuideKey(guide)
+    if guide == "zygor" then
+        return CurrentZygorKey()
+    elseif guide == "rxp" then
+        return CurrentRxpKey()
+    elseif guide == "qtr" then
+        return CurrentQtrKey()
+    end
+end
+
+-- With a guide chosen (author-approved): each new step of it, while it drives DQT,
+-- focuses the step's quest in your log in Questie's tracker, as its tracker menu does.
+-- Questie's FocusQuest also sets the game's focus (Questie 12.9.0, TrackerUtils.lua),
+-- so both agree. Not without Questie, and not for a step with no quest in your log.
+local function DriveQuestie(quest)
+    local guide = ChosenGuide()
+    if not guide or not GuideCounts(guide) or type(quest) ~= "table" or quest.via ~= GUIDE_NAMES[guide] then
+        return
+    end
+    local key = GuideKey(guide)
+    local questID = quest.logQuest
+    if not key or key == pushedKey or not questID then
+        return
+    end
+    pushedKey = key
+    local utils = DQT.QuestieFocusAvailable() and QuestieModule("TrackerUtils")
+    if not utils or (questID == QuestieFocus() and questID == (GameFocus() or questID)) then
+        return
+    end
+    if utils:FocusQuest(questID) then
+        QuestieNotes()
+    end
+end
+
+-- Re-sync is offered while a guide is chosen (the box's button, /dqt resync, and a key
+-- binding).
+function DQT.ResyncAvailable()
+    return ChosenGuide() ~= nil
+end
+
+-- Back to the chosen guide's current step: the macro follows it, and its quest goes to
+-- Questie's tracker again. No message from SelectGuide.
+local function BackToGuide(guide)
+    guideFocus = guide
+    pendingFocus = nil
+    pushedKey = nil
+    DQT.Refresh()
+end
+
+function DQT.Resync()
+    local guide = ChosenGuide()
+    if not guide then
+        DQT.Report("Re-sync needs an active guide: choose Zygor, RestedXP, or QuestTrail under \"Active guide\" "
+            .. "in the settings (/dqt).")
+        return
+    end
+    BackToGuide(guide)
+    DQT.Report("Re-synced with " .. GUIDE_NAMES[guide] .. "'s current step."
+        .. (InCombatLockdown() and " The macro updates after combat." or ""))
+end
+
+-- The "Active guide" setting. Choosing a guide puts it in charge at once; choosing
+-- Questie hands the macro to the quest focus.
+function DQT.SelectGuide(key)
+    if not DQT.ACTIVE_GUIDE_LABELS[key] then
+        return
+    end
+    DQT.db.activeGuide = key
+    local guide = ChosenGuide()
+    if guide then
+        BackToGuide(guide)
+        return
+    end
+    if key == "questie" then
+        guideFocus = nil
+    end
+    pendingFocus = nil
+    DQT.Refresh()
+end
+
+function DQT.SyncFocus(quest)
+    DriveQuestie(quest)
     local from = syncFrom
     syncFrom = nil
     local questieID = QuestieFocus()
@@ -1246,13 +1437,13 @@ end
 -- follows the quest focus.
 local function GuideLocation()
     local location
-    if guideFocus == "zygor" or guideFocus == "login" then
+    if GuideCounts("zygor") then
         location = ZygorLocation()
     end
-    if not location and (guideFocus == "rxp" or guideFocus == "login") then
+    if not location and GuideCounts("rxp") then
         location = RxpLocation()
     end
-    if not location and (guideFocus == "qtr" or guideFocus == "login") then
+    if not location and GuideCounts("qtr") then
         location = QtrLocation()
     end
     return location
@@ -1468,6 +1659,8 @@ function DQT.ReportQuestDebug()
     DQT.Report("debug game focus=" .. gameFocus .. " Questie focus="
         .. tostring(questieID) .. (questieObjective and (" objective " .. questieObjective) or "")
         .. " latest=" .. focusSource .. " followQuestie=" .. tostring(DQT.db.questieFocus))
+    DQT.Report("debug active guide=" .. DQT.ActiveGuide() .. " (saved " .. tostring(DQT.db.activeGuide)
+        .. ") pushed step=" .. tostring(pushedKey))
     local step, zgv = ZygorStep()
     DQT.Report("debug Zygor: " .. (not Zygor() and "not loaded" or not DQT.db.zygorFocus and "not followed"
         or not step and "no step" or ("step " .. ZygorKey(step, zgv))) .. " guide latest=" .. tostring(guideFocus))

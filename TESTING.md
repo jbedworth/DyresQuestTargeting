@@ -103,6 +103,20 @@ With `/dqt debug` for details:
    Forever's mobs.
 7. `/dqt add Goretusk` finds Great Goretusk; `/dqt add_exact` does not.
    `/dqt add` with a dead mob targeted adds its name.
+34. Active guide (Questie 12.9.0 with "Follow Blizzard Super Tracking" on, and
+    Zygor, RestedXP, or QuestTrail): "Active guide" lists Most Recent Focus and only
+    the AddOns installed and followed. Most Recent Focus: accepting a quest with
+    nothing focused still takes the macro (as before). Choose the guide: the macro
+    follows its step, Questie's tracker focuses the step's quest, and the box header
+    shows the re-sync button. Turn in the focused quest (so nothing is focused),
+    then accept a quest: the macro and Questie's focus stay on the guide's quest (a
+    short flicker in Questie's tracker is possible), and no "Focused quest changed"
+    line. Note how long Questie takes to focus the accepted quest (`/dqt debug`
+    right after; it should be the same frame). Focus another quest in Questie's
+    tracker: it wins; the guide's next step takes over again. Focus another quest,
+    then click the re-sync button, `/dqt resync`, and the key binding: each goes
+    back to the step. Choose Questie: guide steps no longer change the macro, and
+    the button hides. `/dqt debug` shows "active guide=". No Lua errors.
 33. With QuestTrail (and Questie, QuestieDB, TomTom): "Follow QuestTrail's
     current step" is on, under "Integrations (Experimental)"; with QuestTrail
     disabled and `/reload`, it is greyed. When the compass points at an objective:
@@ -118,10 +132,11 @@ With `/dqt debug` for details:
     QuestTrail still keeps its plan. `/dqt debug` shows "QuestTrail: step ...". No
     Lua errors.
 32. Key bindings: Options > Key Bindings > AddOns shows "Dyre's Quest
-    Targeting" with three bindings. Bind each to a key. Target a mob: the add
+    Targeting" with four bindings. Bind each to a key. Target a mob: the add
     key adds it with similar names, the exact key with its exact name, the
     remove key takes it off; with no target, the add key says "Target a mob or
-    type a name.". In combat: the hit list changes at once and the macro after
+    type a name.". With no guide chosen, the re-sync key says "Re-sync needs an
+    active guide". In combat: the hit list changes at once and the macro after
     combat. No Lua errors.
 8. In combat: `/dqt add` says the macro updates after combat; it does, once
    combat ends, and nothing is blocked (no "AddOn action blocked" message).
