@@ -3,6 +3,12 @@
 Player-facing changes for each Dyre's Quest Targeting release, newest first. The
 release builder puts the matching section at the top of each release's notes.
 
+## 1.6.0
+
+### Features
+
+- DQT's settings and the Quest Target Box's place, size, and style are now part of your Dyre's Toolkit profile: copy them from another character, or export and import them, on Dyre's Toolkit's settings page. They apply at once, with no reload. Your hit list and your "On a mob, also" spell stay with each character. This needs Dyre's Toolkit 2.10.0 or newer; with an older one, DQT works as before.
+
 ## 1.5.0
 
 ### Features

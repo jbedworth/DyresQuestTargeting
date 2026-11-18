@@ -160,6 +160,14 @@ installs it with DQT). With an older toolkit, the macro still works, its
 settings are under Options > AddOns > Dyre's Quest Targeting, there is no
 box, and chat says once at login to update the toolkit from CurseForge.
 
+DQT's settings are part of your **Dyre's Toolkit profile** (Dyre's Toolkit
+2.10.0 or newer): on the toolkit's settings page, copy them from another
+character or from the defaults, or export them as one line of text and import it
+on another character. That also moves the Quest Target Box's place, size, and
+style. It applies at once, with no reload, and only out of combat. Your hit list
+and your "On a mob, also" spell stay with each character: the hit list is your
+quests' mobs, and the spell comes from that character's spellbook.
+
 ## Without Questie
 
 Questie is optional. Without it, the settings that need Questie are greyed

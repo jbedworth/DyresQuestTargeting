@@ -700,9 +700,47 @@ BINDING_NAME_DQT_ADD_TARGET_EXACT = "Add target to the hit list (exact name)"
 BINDING_NAME_DQT_REMOVE_TARGET = "Remove target from the hit list"
 BINDING_NAME_DQT_RESYNC = "Re-sync with your active guide"
 
+-- Dyre's Toolkit Profile (Toolkit 2.10.0; John, 2026-11-15): the toolkit keeps a
+-- copy of this character's settings, to copy to another character, export, and
+-- import; DQT keeps its live settings here. Two keys stay with this character:
+-- the hit list (mobs of this character's quests and places) and the opener (a
+-- spell from this character's spellbook). The macro's name is fixed, not saved.
+local PROFILE_CHARACTER_KEYS = {"added", "opener"}
+local profileJoined = false
+
+-- A copy or import, written into DyresQuestTargetingDB in place: the box takes
+-- its place, size, and colors again, and the macro is rebuilt, live.
+function DQT.ApplyProfile()
+    local toolkit = DQT.Toolkit()
+    if toolkit and type(toolkit.ReapplyWidgets) == "function" then
+        toolkit.ReapplyWidgets(addonName)
+    end
+    DQT.ApplyBoxStyle()
+    DQT.SelectGuide(DQT.db.activeGuide)
+end
+
+-- Once, after the saved settings load and before the box is built. With an older
+-- toolkit, or none, DQT keeps its own settings as before.
+local function JoinProfile()
+    local toolkit = DQT.Toolkit()
+    if profileJoined or not toolkit or type(toolkit.RegisterProfilePart) ~= "function" then
+        return
+    end
+    profileJoined = true
+    toolkit.RegisterProfilePart({
+        addon = addonName,
+        title = DEFAULT_TITLE,
+        current = function() return DyresQuestTargetingDB end,
+        sanitize = function(settings) return DQT.SanitizeDB(settings) end,
+        characterKeys = PROFILE_CHARACTER_KEYS,
+        refresh = function() DQT.ApplyProfile() end,
+    })
+end
+
 local function LoadDB()
     DyresQuestTargetingDB = DQT.SanitizeDB(DyresQuestTargetingDB)
     DQT.db = DyresQuestTargetingDB
+    JoinProfile()
 end
 
 -- The focused quest changing, its progress, and quests leaving the log.

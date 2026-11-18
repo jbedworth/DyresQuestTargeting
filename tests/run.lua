@@ -34,10 +34,11 @@ local RUNTIME_FILES = {"Commands.lua", "Core.lua", "Quest.lua", "Macro.lua", "Bo
 -- Dyre's Toolkit's files the tests load: the real toolkit in ../DyresToolkit
 -- when that folder is there, else the copy in tests/toolkit (as in CI). Not
 -- the minimap, which needs the embedded libraries.
-local TOOLKIT_FILES = {"Core.lua", "Layout.lua", "Widgets.lua", "Settings.lua"}
+local TOOLKIT_FILES = {"Core.lua", "Layout.lua", "Widgets.lua", "Settings.lua", "Profiles.lua"}
 local TOOLKIT_DIR = "tests/toolkit/"
+-- DQT_VENDORED_TOOLKIT=1 runs against the copy, as CI does.
 do
-    local real = io.open("../DyresToolkit/Core.lua", "rb")
+    local real = not os.getenv("DQT_VENDORED_TOOLKIT") and io.open("../DyresToolkit/Core.lua", "rb")
     if real then
         real:close()
         TOOLKIT_DIR = "../DyresToolkit/"
@@ -425,7 +426,14 @@ local function fixture(options)
     env.IsShiftKeyDown = function() return state.shift == true end
     env.GetCursorPosition = function() return state.cursorX or 0, state.cursorY or 0 end
     env.UnitExists = function(unit) equal(unit, "target") return state.target ~= nil end
-    env.UnitName = function(unit) equal(unit, "target") return state.target end
+    env.UnitName = function(unit)
+        -- The toolkit's profile names this character "Name - Realm".
+        if unit == "player" then return "Dyre" end
+        equal(unit, "target")
+        return state.target
+    end
+    env.GetRealmName = function() return "Forever" end
+    env.UnitClass = function() return "Mage" end
 
     -- Settings: proxy settings with getters and setters, as the client builds them.
     if not options.noSettings then
@@ -639,6 +647,8 @@ local function fixture(options)
     if not options.noToolkit then
         state.toolkitNS = {InitializeMinimap = function() end}
         for _, path in ipairs(TOOLKIT_FILES) do
+            -- options.noProfiles: a toolkit older than 2.10.0, with no profiles.
+            if path == "Profiles.lua" and options.noProfiles then break end
             local chunk = assert(loadfile(TOOLKIT_DIR .. path))
             setfenv(chunk, env)
             chunk("DyresToolkit", state.toolkitNS)
@@ -665,6 +675,7 @@ local function fixture(options)
         if saved.startHitListFolded == nil then saved.startHitListFolded = false end
     end
     env.DyresQuestTargetingDB = saved
+    env.DyresToolkitDB = options.toolkitDB
     state.emit("ADDON_LOADED", "DyresToolkit")
     state.emit("ADDON_LOADED", ADDON)
     state.emit("PLAYER_LOGIN")
@@ -712,7 +723,7 @@ local CONDOR_QUEST = {[101] = {title = "The Condor Hunt", objectives = {
 
 test("logs in with a banner and makes the character macro", function()
     local state = fixture()
-    contains(state.messages[1], "DQT: Dyre's Quest Targeting 1.5.0 by Dyre")
+    contains(state.messages[1], "DQT: Dyre's Quest Targeting 1.6.0 by Dyre")
     equal(state.said("Ready."), true)
     equal(state.dqt.available, true)
     contains(state.macro(), "nothing to target")
@@ -3606,6 +3617,94 @@ test("active guide: QuestTrail's step drives Questie's focus; a focus while the 
     state.slash("resync")
     equal(state.env.Questie.db.char.TrackerFocus, 2, "re-sync puts the step's quest back")
     equal(state.said("Re-synced with QuestTrail's current step."), true)
+end)
+
+-- Dyre's Toolkit Profile: DQT's part.
+local OTHER = "Alt - Forever"
+
+local function otherProfile(part)
+    return {profiles = {[OTHER] = {class = "Warrior", seen = 1, parts = {DyresQuestTargeting = part}, pending = {}}}}
+end
+
+test("profile: DQT joins the toolkit's profile; without RegisterProfilePart nothing changes", function()
+    local state = fixture({quests = TWO_QUESTS, focus = 1})
+    local parts = state.toolkit.ProfileParts()
+    equal(parts[#parts], "DyresQuestTargeting", "registered")
+    local old = fixture({quests = TWO_QUESTS, focus = 1, noProfiles = true})
+    equal(old.toolkit.RegisterProfilePart, nil)
+    contains(old.macro(), "/targetexact Boar", "an older toolkit: the macro works as before")
+    equal(old.said("error"), false)
+end)
+
+test("profile: sanitize({}) gives DQT's defaults and repairs anything", function()
+    local state = fixture({quests = TWO_QUESTS, focus = 1})
+    local defaults = state.dqt.SanitizeDB({})
+    equal(defaults.enabled, true)
+    equal(defaults.activeGuide, "recent")
+    equal(defaults.boxStyle, "brown")
+    equal(defaults.startHitListFolded, true)
+    equal(#defaults.added, 0)
+    local repaired = state.dqt.SanitizeDB({enabled = "x", activeGuide = 5, box = 7, added = {"bad", {name = 3}},
+        mobMarker = 99, opener = {}, future = {deep = true}})
+    equal(repaired.enabled, true)
+    equal(repaired.activeGuide, "recent")
+    equal(type(repaired.box.foldedSections), "table")
+    equal(#repaired.added, 0)
+    equal(repaired.mobMarker, state.dqt.DEFAULT_MOB_MARKER)
+    equal(repaired.opener, state.dqt.OPENER_NONE)
+end)
+
+test("profile: a copy from another character applies live and keeps the hit list and opener", function()
+    local part = {enabled = true, mark = true, mobMarker = 2, npcMarker = 3, boxStyle = "black",
+        activeGuide = "recent", startQuestFolded = true, box = {width = 300, foldedSections = {}},
+        added = {{name = "Alt Mob", exact = true}}, opener = "Charge"}
+    local state = fixture({quests = TWO_QUESTS, focus = 1, toolkitDB = otherProfile(part),
+        saved = {added = {{name = "Kobold", exact = false}}, opener = "Fireball(Rank 1)"}})
+    local db = state.env.DyresQuestTargetingDB
+    local box, store = state.dqt.box, db.box
+    local ok, reload = state.toolkitNS.profile:CopyFrom(OTHER)
+    equal(ok, true)
+    equal(#reload, 0, "live: no reload asked")
+    equal(state.env.DyresQuestTargetingDB, db, "the same live table")
+    equal(db.box, store, "nested tables kept, so the widget's store sees the new values")
+    equal(db.mobMarker, 2)
+    equal(db.boxStyle, "black")
+    equal(db.box.width, 300)
+    equal(db.added[1].name, "Kobold", "the hit list stays this character's")
+    equal(db.opener, "Fireball(Rank 1)", "the opener stays this character's")
+    contains(state.macro(), "!2", "the macro has the new mob marker")
+    contains(state.macro(), "/tar Kobold")
+    lacks(state.macro(), "Alt Mob")
+    equal(box.backdropColor[1], state.dqt.BOX_STYLES.black.panel[1], "the box has the new style")
+    equal(box.width, 300, "and the new width")
+end)
+
+test("profile: a part DQT cannot take changes nothing; Defaults keep the hit list", function()
+    local state = fixture({quests = TWO_QUESTS, focus = 1, toolkitDB = otherProfile({mobMarker = 2}),
+        saved = {mobMarker = 5, added = {{name = "Kobold", exact = true}}}})
+    local db = state.env.DyresQuestTargetingDB
+    local sanitize = state.dqt.SanitizeDB
+    state.dqt.SanitizeDB = function() error("broken") end
+    local ok, why = state.toolkitNS.profile:CopyFrom(OTHER)
+    equal(ok, nil)
+    contains(why, "Dyre's Quest Targeting cannot take those settings")
+    equal(db.mobMarker, 5, "nothing changed")
+    state.dqt.SanitizeDB = sanitize
+    equal(state.toolkitNS.profile:CopyFrom(state.toolkit.PROFILE_DEFAULTS), true)
+    equal(db.mobMarker, state.dqt.DEFAULT_MOB_MARKER, "Defaults")
+    equal(db.added[1].name, "Kobold", "the hit list stays")
+end)
+
+test("profile: export and import carry DQT's settings, not the hit list", function()
+    local state = fixture({quests = TWO_QUESTS, focus = 1, saved = {mobMarker = 6, added = {{name = "Kobold",
+        exact = true}}}})
+    local line = state.toolkitNS.profile:Export()
+    lacks(line, "Kobold", "the hit list is not exported")
+    local db = state.env.DyresQuestTargetingDB
+    db.mobMarker = 1
+    equal(state.toolkitNS.profile:Import(line), true)
+    equal(db.mobMarker, 6)
+    contains(state.macro(), "!6")
 end)
 
 local function zway(x, y, fields)

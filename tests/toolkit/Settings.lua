@@ -14,6 +14,9 @@ local REQUIRED = {
 }
 
 local home, homeLayout
+-- Every page's layout (the home and each Dyre's AddOn's page), so a profile
+-- applied live can tell their settings to read their values again.
+ns.settingsLayouts = {}
 
 local function HasSettingsAPI()
     if type(Settings) ~= "table" or type(Settings.VarType) ~= "table" then
@@ -31,8 +34,14 @@ local function Home()
     if not home and HasSettingsAPI() then
         home, homeLayout = Settings.RegisterVerticalLayoutCategory(HOME)
         Settings.RegisterAddOnCategory(home)
+        ns.settingsLayouts[#ns.settingsLayouts + 1] = homeLayout
     end
     return home, homeLayout
+end
+
+-- The toolkit's own page and its layout (its sections: GroupSettings.lua).
+function ns.HomeCategory()
+    return Home()
 end
 
 function DyresToolkit.SettingsCategory()
@@ -56,7 +65,11 @@ function DyresToolkit.RegisterSettingsCategory(name)
     if not parent then
         return nil
     end
-    return Settings.RegisterVerticalLayoutSubcategory(parent, ns.ShortName(name))
+    local category, layout = Settings.RegisterVerticalLayoutSubcategory(parent, ns.ShortName(name))
+    if layout then
+        ns.settingsLayouts[#ns.settingsLayouts + 1] = layout
+    end
+    return category, layout
 end
 
 -- No panels in combat.

@@ -394,6 +394,21 @@ function DyresToolkit.ResetWidgets(addon)
     end
 end
 
+-- New saved values in a widget's store (a profile copied or imported, 2.10.0):
+-- the numbers are repaired, then place, scale, size, and opacity are set
+-- again from the store, as at creation. A protected widget waits for the end
+-- of combat. The store must be the same table (Profiles.lua writes in place).
+function DyresToolkit.ReapplyWidgets(addon)
+    for _, widget in ipairs(byAddOn[addon] or {}) do
+        for _, name in ipairs(widget.dyre.sizes.order) do
+            local key = widget.dyre.keys[name]
+            widget.dyre.store[key] = Clamp(widget.dyre.sizes[name], widget.dyre.store[key])
+        end
+        widget.dyre.lastAnchor = nil
+        Setup(widget)
+    end
+end
+
 function DyresToolkit.Widgets(addon)
     local list = {}
     for _, widget in ipairs(byAddOn[addon] or {}) do

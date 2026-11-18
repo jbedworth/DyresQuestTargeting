@@ -481,6 +481,22 @@ minimap menu, and widgets (contract 2). The Quest Target box is a widget.
   Options makes the page with `RegisterSettingsCategory`, under "Dyre's
   AddOns", with the same settings and Integrations section heading. `/dqt` still
   opens DQT's own page.
+- Dyre's Toolkit Profile (Toolkit 2.10.0; John, 2026-11-15 and 2026-11-17: "one
+  place to go to persist your profile"; ../DyresToolkit/docs/PROFILES.md): Core's
+  `JoinProfile`, from `LoadDB` (after the saved settings load, before the box), calls
+  `RegisterProfilePart{addon, title, current = DyresQuestTargetingDB, sanitize =
+  DQT.SanitizeDB, characterKeys, refresh = DQT.ApplyProfile}` when the toolkit has
+  it; an older toolkit, or none, changes nothing, and the minimum toolkit stays.
+  In the profile: every other key of DyresQuestTargetingDB (the macro switch,
+  markers, mark, accountMacro, the Follow switches, activeGuide, syncFocus, tomtom,
+  the box's switch, style, start folds, and `box`: its place, sizes, opacity, and
+  folds). `characterKeys` (never copied, exported, or imported): `added`, the hit
+  list (live data: the mobs of this character's quests and places) and `opener`
+  (a spell of this character's spellbook; another class's spell would do nothing).
+  The macro's name is a constant, not saved. No account table. `ApplyProfile`
+  (live, no reload): the toolkit's `ReapplyWidgets` for the box, `ApplyBoxStyle`,
+  then `SelectGuide(db.activeGuide)`, which rebuilds the macro (a write in combat
+  waits, as always; the toolkit refuses a copy in combat anyway).
 - Otherwise (an older toolkit, or no page from it), the macro works as
   before with a top-level page and no box, and one chat line at login says
   to install or update Dyre's Toolkit from CurseForge.
@@ -657,9 +673,9 @@ minimap menu, and widgets (contract 2). The Quest Target box is a widget.
   Dyre's Toolkit, and startup; Quest builds the focused quest's names; Macro builds and writes the
   macro; Box draws the Quest Target box; Options owns the settings page and
   the spellbook list.
-- The suite loads the real Dyre's Toolkit (Core, Layout, Widgets, Settings)
-  from ../DyresToolkit when that folder exists, else the copy in tests/toolkit
-  (as in CI). No test compares the copy with the toolkit (author: shared files
+- The suite loads the real Dyre's Toolkit (Core, Layout, Widgets, Settings,
+  Profiles) from ../DyresToolkit when that folder exists, else the copy in
+  tests/toolkit (as in CI; `DQT_VENDORED_TOOLKIT=1` uses the copy locally too). No test compares the copy with the toolkit (author: shared files
   are not checked byte for byte); a test checks the contract and the
   functions DQT calls. Refresh the copy when CI needs newer toolkit behavior.
 - artwork/ holds the logo (SVG source, 1024 and 512 PNG renders) and

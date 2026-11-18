@@ -103,6 +103,16 @@ With `/dqt debug` for details:
    Forever's mobs.
 7. `/dqt add Goretusk` finds Great Goretusk; `/dqt add_exact` does not.
    `/dqt add` with a dead mob targeted adds its name.
+35. Profile (Dyre's Toolkit 2.10.0 or newer, two characters): on the first,
+    set a mob marker, the box's style and width, and add a hit list name; move
+    the box. On the second, with its own hit list and opener: on Dyre's Toolkit's
+    settings page, "Copy settings from" the first character, Copy. At once, with
+    no reload and no "Reload to finish" popup: DQT's settings page (if open) and
+    the macro show the first character's marker, the box its style, width, and
+    place; the second character's hit list and "On a mob, also" stay. "Defaults":
+    DQT's defaults, the hit list stays. "Export profile", then change a marker,
+    then "Import profile" with that line: the marker comes back. In combat, Copy
+    says to change settings out of combat. No Lua errors.
 34. Active guide (Questie 12.9.0 with "Follow Blizzard Super Tracking" on, and
     Zygor, RestedXP, or QuestTrail): "Active guide" lists Most Recent Focus and only
     the AddOns installed and followed. Most Recent Focus: accepting a quest with
