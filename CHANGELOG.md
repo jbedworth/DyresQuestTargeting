@@ -3,6 +3,13 @@
 Player-facing changes for each Dyre's Quest Targeting release, newest first. The
 release builder puts the matching section at the top of each release's notes.
 
+## 1.6.1
+
+### Fixes
+
+- Clients in other languages: "On a mob, also" now lists each rank of a spell (such as "Rang 3" in French) and casts it with the client's own words.
+- Clients in other languages: a kill objective now targets its mob when Questie's database does not know it, using the client's own objective text (such as "Condor : 0/8 personnages tués" in French).
+
 ## 1.6.0
 
 ### Features

@@ -51,11 +51,93 @@ local function Contains(text, fragment)
     return type(fragment) == "string" and fragment ~= "" and text:lower():find(fragment:lower(), 1, true) ~= nil
 end
 
--- "Dire Condor slain: 0/8" or "0/8 Dire Condor slain" to "Dire Condor".
--- English wording only; other text is kept as it is, which at worst targets nothing.
+-- The client's formats for objective text, in its language, most specific first:
+-- "%s slain: %d/%d" (Classic), "%2$d/%3$d %1$s slain" (mainline enUS),
+-- "%1$s : %2$d/%3$d |4personnage tué:personnages tués;" (mainline frFR).
+local OBJECTIVE_FORMATS = {"QUEST_MONSTERS_KILLED", "QUEST_OBJECTS_FOUND"}
+-- French puts a no-break space (UTF-8 C2 A0) before ":"; it counts as a space.
+local NO_BREAK_SPACE = "\194\160"
+local SPACE = "%s*"
+local formatPatterns = {}
+
+local function LiteralPattern(text)
+    local pattern = ""
+    for word, gap in text:gsub(NO_BREAK_SPACE, " "):gmatch("(%S*)(%s*)") do
+        pattern = pattern .. word:gsub("[%^%$%(%)%%%.%[%]%*%+%-%?]", "%%%0") .. (gap ~= "" and SPACE or "")
+    end
+    return pattern
+end
+
+-- Lua patterns for one format, the name (argument 1) captured. "|4one:many;"
+-- picks a word by number, so each word gives its own pattern.
+local function FormatPatterns(format)
+    local patterns = formatPatterns[format]
+    if patterns then
+        return patterns
+    end
+    patterns = {}
+    local first, last, words = format:find("|4([^;]*);")
+    if first then
+        for word in (words .. ":"):gmatch("([^:]*):") do
+            for _, each in ipairs(FormatPatterns(format:sub(1, first - 1) .. word .. format:sub(last + 1))) do
+                patterns[#patterns + 1] = each
+            end
+        end
+    else
+        local pattern, position, nextArgument, named = "", 1, 1, false
+        while position <= #format do
+            local from, to, index, kind = format:find("%%(%d*)%$?([sd])", position)
+            if not from then
+                from, to = #format + 1, #format
+            end
+            pattern = pattern .. LiteralPattern(format:sub(position, from - 1))
+            if kind then
+                local argument = tonumber(index) or nextArgument
+                nextArgument = argument + 1
+                if kind == "d" then
+                    pattern = pattern .. "%d+"
+                elseif argument == 1 and not named then
+                    pattern, named = pattern .. "(.-)", true
+                else
+                    pattern = pattern .. ".-"
+                end
+            end
+            position = to + 1
+        end
+        if named then
+            patterns[1] = "^" .. SPACE .. pattern .. SPACE .. "$"
+        end
+    end
+    formatPatterns[format] = patterns
+    return patterns
+end
+
+-- The client's own format, as in "Dire Condor slain: 0/8", "0/8 Dire Condor
+-- slain", or "Condor : 0/8 personnages tués", gives "Dire Condor".
+local function FormattedName(text)
+    text = text:gsub(NO_BREAK_SPACE, " ")
+    for _, key in ipairs(OBJECTIVE_FORMATS) do
+        local format = _G[key]
+        if type(format) == "string" then
+            for _, pattern in ipairs(FormatPatterns(format)) do
+                local name = text:match(pattern)
+                if name and name ~= "" then
+                    return name
+                end
+            end
+        end
+    end
+end
+
+-- Without the client's formats, or text in none of them: the English wording
+-- is stripped; other text is kept as it is, which at worst targets nothing.
 function DQT.ObjectiveName(text)
     if type(text) ~= "string" or DQT.IsSecret(text) then
         return nil
+    end
+    local formatted = FormattedName(text)
+    if formatted then
+        return DQT.CheckName(formatted)
     end
     local name = text:gsub("^%s*%d+%s*/%s*%d+%s+", ""):gsub("%s*:%s*%d+%s*/%s*%d+%s*$", "")
     name = name:gsub("%s+slain$", ""):gsub("%s+killed$", "")

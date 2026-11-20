@@ -97,11 +97,13 @@ local function SpellbookSpells()
             spells[#spells + 1] = name
         end
     end
+    -- The subName is in the client's language ("Rank 3", "Rang 3", "等级 3"), and
+    -- /use takes the client's own words, so only its one number changes per rank.
     local function AddRanks(name, subName)
-        local rank = type(subName) == "string" and tonumber(subName:match("^Rank (%d+)$"))
+        local rank = type(subName) == "string" and tonumber(subName:match("^%D*(%d+)%D*$"))
         if rank then
             for each = 1, rank do
-                Add(name .. "(Rank " .. each .. ")")
+                Add(name .. "(" .. subName:gsub("%d+", tostring(each), 1) .. ")")
             end
         else
             Add(name)

@@ -49,7 +49,10 @@ prefix `DQT:`. Listings say plainly that it is for WoW: Forever.
   active spellbook spells, `/use [harm,nodead] Name(Rank N)` (author's rule:
   `/use`, not `/cast`, in every Dyre's AddOn macro: one letter shorter; with
   no item of that name it casts the spell), each rank
-  up to the one the spellbook shows. Only harmful spells
+  up to the one the spellbook shows. The rank is the spellbook's own subtext
+  ("Rank 3", "Rang 3", "等级 3"; 1.6.1, John: "Yes, fix all six"): its one
+  number gives the rank, and the macro uses the client's words with that number
+  changed. Only harmful spells
   (`C_Spell.IsSpellHarmful`) that cast in 1 second or less
   (`C_Spell.GetSpellInfo(...).castTime`, ms) are listed, checked per rank
   (author-approved); without those APIs, every spell. Never on an NPC. A saved spell the
@@ -107,8 +110,16 @@ prefix `DQT:`. Listings say plainly that it is for WoW: Forever.
   game's focus. Not the tracked (watched) quests.
 - Quest names always use `/targetexact` (author-approved, no setting).
 - Unfinished objectives, the first objective last (most important). Kill
-  objectives (`monster`): the client's text gives the name ("X slain: 0/8" or
-  "0/8 X slain", English only). Item objectives: no client source.
+  objectives (`monster`): the client's text gives the name, read with the
+  client's own formats (1.6.1): `QUEST_MONSTERS_KILLED`, then
+  `QUEST_OBJECTS_FOUND`, turned into Lua patterns (pattern characters escaped,
+  the name is argument 1, `%d` any number, "|4one:many;" each word, a no-break
+  space as a space). Classic's enUS is "%s slain: %d/%d", mainline's "%2$d/%3$d
+  %1$s slain", frFR's "%1$s : %2$d/%3$d |4personnage tué:personnages tués;"
+  (Ketho/BlizzardInterfaceResources GlobalStrings; the pinned wow-ui-source has
+  no GlobalStrings). Text in neither format, or no globals: the English "X
+  slain: 0/8" or "0/8 X slain" is stripped, other text kept. Item objectives: no
+  client source.
 - "Follow Questie's tracker focus" (`db.questieFocus`, default on; author-
   approved): off ignores Questie's focus. Without Questie installed, DQT
   follows the game's focus only, and without QuestieDB targets kill

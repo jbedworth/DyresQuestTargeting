@@ -723,7 +723,7 @@ local CONDOR_QUEST = {[101] = {title = "The Condor Hunt", objectives = {
 
 test("logs in with a banner and makes the character macro", function()
     local state = fixture()
-    contains(state.messages[1], "DQT: Dyre's Quest Targeting 1.6.0 by Dyre")
+    contains(state.messages[1], "DQT: Dyre's Quest Targeting 1.6.1 by Dyre")
     equal(state.said("Ready."), true)
     equal(state.dqt.available, true)
     contains(state.macro(), "nothing to target")
@@ -1537,9 +1537,10 @@ local SPELL_INFO = {
     ["Mark of the Wild(Rank 1)"] = {harmful = false, castTime = 0},
 }
 
-local function spellbookGlobals(noSpellInfo)
+local function spellbookGlobals(noSpellInfo, book, info)
+    book, info = book or SPELLBOOK, info or SPELL_INFO
     local function item(slot)
-        for _, line in ipairs(SPELLBOOK) do
+        for _, line in ipairs(book) do
             local entry = line.items[slot - line.offset]
             if entry then return entry end
         end
@@ -1547,9 +1548,9 @@ local function spellbookGlobals(noSpellInfo)
     return {
         Enum = {SpellBookSpellBank = {Player = 0, Pet = 1}, SpellBookItemType = {None = 0, Spell = 1, Flyout = 2}},
         C_SpellBook = {
-            GetNumSpellBookSkillLines = function() return #SPELLBOOK end,
+            GetNumSpellBookSkillLines = function() return #book end,
             GetSpellBookSkillLineInfo = function(index)
-                local line = SPELLBOOK[index]
+                local line = book[index]
                 return {name = line.name, itemIndexOffset = line.offset, numSpellBookItems = #line.items,
                     isGuild = line.isGuild == true, shouldHide = false}
             end,
@@ -1561,10 +1562,10 @@ local function spellbookGlobals(noSpellInfo)
             end,
         },
         C_Spell = not noSpellInfo and {
-            IsSpellHarmful = function(name) return SPELL_INFO[name] ~= nil and SPELL_INFO[name].harmful end,
+            IsSpellHarmful = function(name) return info[name] ~= nil and info[name].harmful end,
             GetSpellInfo = function(name)
-                local info = SPELL_INFO[name]
-                return info and {name = name, castTime = info.castTime}
+                local spell = info[name]
+                return spell and {name = name, castTime = spell.castTime}
             end,
         } or nil,
     }
@@ -1627,6 +1628,28 @@ test("the opener lists every spellbook spell and rank, and casts the one picked"
     opener.setting:SetValue("")
     lacks(state.macro(), "/startattack")
     lacks(state.macro(), "/use")
+end)
+
+-- A French client: the rank subtext is "Rang N", and /use takes it as it is.
+test("the opener reads ranks in the client's language and casts its own words", function()
+    local book = {{name = "Équilibre", offset = 0, items = {
+        {name = "Éclat lunaire", subName = "Rang 3", itemType = 1},
+        {name = "Racines", subName = "等级 2", itemType = 1},
+        {name = "Attaque", subName = "", itemType = 1},
+    }}}
+    local info = {["Attaque"] = {harmful = true, castTime = 0}}
+    for rank = 1, 3 do info["Éclat lunaire(Rang " .. rank .. ")"] = {harmful = true, castTime = 0} end
+    for rank = 1, 2 do info["Racines(等级 " .. rank .. ")"] = {harmful = true, castTime = 0} end
+    local state = fixture({quests = CONDOR_QUEST, focus = 101, globals = spellbookGlobals(false, book, info)})
+    local opener = state.registered.initializers[5]
+    local labels = {}
+    for _, choice in ipairs(opener.options()) do labels[#labels + 1] = choice.label end
+    equal(table.concat(labels, ","), "Nothing,Start attacking (/startattack),Attaque,"
+        .. "Racines(等级 1),Racines(等级 2),Éclat lunaire(Rang 1),Éclat lunaire(Rang 2),Éclat lunaire(Rang 3)",
+        "every rank, in the client's words")
+    opener.setting:SetValue("Éclat lunaire(Rang 2)")
+    local body = lines(state.macro())
+    equal(body[#body], "/use [harm,nodead] Éclat lunaire(Rang 2)")
 end)
 
 test("each dropdown sets its own label function, so a pooled frame's stale one is replaced", function()
@@ -2757,6 +2780,37 @@ test("objective names come from English kill text in either order", function()
     local hidden = secret()
     state.secrets[hidden] = true
     equal(name(hidden), nil)
+end)
+
+-- The client's own formats (Ketho/BlizzardInterfaceResources GlobalStrings).
+local FRENCH = {QUEST_MONSTERS_KILLED = "%1$s\194\160: %2$d/%3$d |4personnage tué:personnages tués;",
+    QUEST_OBJECTS_FOUND = "%1$s\194\160: %2$d/%3$d"}
+
+test("objective names come from the client's French kill text", function()
+    local state = fixture({globals = FRENCH})
+    local name = state.dqt.ObjectiveName
+    equal(name("Condor des falaises\194\160: 0/8 personnages tués"), "Condor des falaises")
+    equal(name("Condor des falaises\194\160: 1/1 personnage tué"), "Condor des falaises")
+    equal(name("Tarentule : 2/5 personnages tués"), "Tarentule", "a plain space too")
+    equal(name("Pierre de lune\194\160: 0/1"), "Pierre de lune", "the objects format")
+    equal(name("Tuer l'ogre"), "Tuer l'ogre", "text in no format stays as it is")
+    equal(name("0/8 Dire Condor slain"), "Dire Condor", "the English fallback still works")
+    local classic = fixture({globals = {QUEST_MONSTERS_KILLED = "%s tué\194\160: %d/%d",
+        QUEST_OBJECTS_FOUND = "%s : %d/%d"}})
+    equal(classic.dqt.ObjectiveName("Condor (élite) tué\194\160: 0/8"), "Condor (élite)",
+        "Classic's French format, pattern characters escaped")
+    local english = fixture({globals = {QUEST_MONSTERS_KILLED = "%2$d/%3$d %1$s slain",
+        QUEST_OBJECTS_FOUND = "%2$d/%3$d %1$s"}})
+    equal(english.dqt.ObjectiveName("0/8 Dire Condor slain"), "Dire Condor")
+    equal(english.dqt.ObjectiveName("Dire Condor slain: 0/8"), "Dire Condor", "Classic text, by the fallback")
+end)
+
+test("a French kill objective targets its mob without QuestieDB", function()
+    local globals = {QUEST_MONSTERS_KILLED = FRENCH.QUEST_MONSTERS_KILLED, QUEST_OBJECTS_FOUND = FRENCH.QUEST_OBJECTS_FOUND}
+    local quests = {[101] = {title = "La chasse au condor", objectives = {
+        objective("Condor des falaises\194\160: 0/8 personnages tués")}}}
+    local state = fixture({quests = quests, focus = 101, globals = globals})
+    contains(state.macro(), "/targetexact Condor des falaises\n")
 end)
 
 -- A Zygor goal: its status through GetStatus, as Goal:GetStatus answers.
