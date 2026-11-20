@@ -491,7 +491,8 @@ minimap menu, and widgets (contract 2). The Quest Target box is a widget.
   markers, mark, accountMacro, the Follow switches, activeGuide, syncFocus, tomtom,
   the box's switch, style, start folds, and `box`: its place, sizes, opacity, and
   folds). `characterKeys` (never copied, exported, or imported): `added`, the hit
-  list (live data: the mobs of this character's quests and places) and `opener`
+  list (live data: the mobs of this character's quests and places; author,
+  2026-11-20: "Hit list stays with the character that owns it.") and `opener`
   (a spell of this character's spellbook; another class's spell would do nothing).
   The macro's name is a constant, not saved. No account table. `ApplyProfile`
   (live, no reload): the toolkit's `ReapplyWidgets` for the box, `ApplyBoxStyle`,
