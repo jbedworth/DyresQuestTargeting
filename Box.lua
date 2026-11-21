@@ -91,9 +91,10 @@ local GREY_CODE = "|cff9d9d9d"
 local GOLD_CODE = "|cffffd100"
 
 local box, header, objectiveRow, rows, footer, insertLine, strip, input
--- The hit list rows shown, top to bottom, each with its offset from the
--- box's top (for the drop place); hitRows.line is the row height.
-local hitRows = {}
+-- The rows that can be dragged, by list ("added": the hit list; "targets": the
+-- quest's targets), top to bottom, each with its offset from the box's top (for
+-- the drop place); dragRows.line is the row height.
+local dragRows = {added = {}, targets = {}}
 local DRAG_ALPHA = 0.5
 local INSERT_HEIGHT = 2
 
@@ -214,12 +215,13 @@ local function HideFull(self)
     end
 end
 
--- Reordering the hit list (author): drag a hit list row up or down. The
--- gap the cursor is over: 0 anywhere above the first row (the bar, the
--- quest rows, the header too) to #hitRows anywhere below the last, or nil
--- only when the cursor leaves the box (a drop there cancels).
-local function DropSlot()
-    if #hitRows == 0 then
+-- Reordering (author): drag a hit list row, or a quest target row, up or down
+-- within its own list. The gap the cursor is over: 0 anywhere above the list's
+-- first row (the header too) to #list anywhere below its last, or nil only when
+-- the cursor leaves the box (a drop there cancels).
+local function DropSlot(list)
+    local listRows = dragRows[list]
+    if not listRows or #listRows == 0 then
         return nil
     end
     local scale = box:GetEffectiveScale()
@@ -229,12 +231,12 @@ local function DropSlot()
     if not (left and right and top) or x < left or x > right then
         return nil
     end
-    local offset, line = top - y, hitRows.line
+    local offset, line = top - y, dragRows.line
     if offset < 0 or offset > box:GetHeight() then
         return nil
     end
     local slot = 0
-    for _, row in ipairs(hitRows) do
+    for _, row in ipairs(listRows) do
         if row.offset + line / 2 < offset then
             slot = slot + 1
         end
@@ -244,13 +246,14 @@ end
 
 -- While a row is dragged only (set on the drag's start, cleared on its
 -- stop; never idle): a gold line where the row would drop.
-local function PlaceInsertLine()
-    local slot = DropSlot()
+local function PlaceInsertLine(self)
+    local slot = DropSlot(self.drag)
     if not slot then
         insertLine:Hide()
         return
     end
-    local y = slot < #hitRows and hitRows[slot + 1].offset or hitRows[#hitRows].offset + hitRows.line
+    local list = dragRows[self.drag]
+    local y = slot < #list and list[slot + 1].offset or list[#list].offset + dragRows.line
     insertLine:ClearAllPoints()
     insertLine:SetPoint("TOPLEFT", box, "TOPLEFT", PADDING, -(y - INSERT_HEIGHT / 2))
     insertLine:SetPoint("TOPRIGHT", box, "TOPRIGHT", -PADDING, -(y - INSERT_HEIGHT / 2))
@@ -275,7 +278,7 @@ local function StopReorder(self)
     self:SetScript("OnUpdate", nil)
     self:SetAlpha(1)
     insertLine:Hide()
-    local slot = DropSlot()
+    local slot = DropSlot(self.drag)
     if not slot then
         return
     end
@@ -283,7 +286,12 @@ local function StopReorder(self)
     if slot >= from then
         slot = slot - 1
     end
-    if slot + 1 ~= from then
+    if slot + 1 == from then
+        return
+    end
+    if self.drag == "targets" then
+        DQT.MoveTarget(self.entry, slot + 1)
+    else
         DQT.MoveAdded(self.entry, slot + 1)
     end
 end
@@ -322,10 +330,10 @@ local function Fill(row, item, size, line)
     row:SetHeight(line)
     row.full = item.full
     row.section = item.section
-    row.entry, row.position = item.remove, item.position
-    -- Titles take clicks, and hit list rows (to drag them); other rows take
-    -- the mouse-over only, so clicks pass through them to the world.
-    row:SetMouseClickEnabled(item.section ~= nil or item.remove ~= nil)
+    row.entry, row.position, row.drag = item.entry, item.position, item.drag
+    -- Titles take clicks, and hit list and target rows (to drag them); other
+    -- rows take the mouse-over only, so clicks pass through them to the world.
+    row:SetMouseClickEnabled(item.section ~= nil or item.drag ~= nil)
     row:SetMouseMotionEnabled(true)
     SetFontSize(row.label, size)
     SetFontSize(row.rate, size)
@@ -408,7 +416,9 @@ local function Sections()
     for index = #(current and current.kept or {}), 1, -1 do
         local target = current.kept[index]
         if target.source ~= "added" then
-            targets[#targets + 1] = TargetItem(target)
+            local item = TargetItem(target)
+            item.drag, item.entry, item.position = "targets", target.name, #targets + 1
+            targets[#targets + 1] = item
         end
     end
     for _, target in ipairs(current and current.dropped or {}) do
@@ -419,7 +429,7 @@ local function Sections()
             local entry = DQT.db.added[index]
             local kind = entry.exact and "exact" or "similar"
             added[#added + 1] = {text = entry.name .. " " .. GREY_CODE .. kind .. "|r", remove = entry.name,
-                full = entry.name .. " · " .. kind, position = #added + 1}
+                full = entry.name .. " · " .. kind, drag = "added", entry = entry.name, position = #added + 1}
         end
     end
     local sections = {}
@@ -555,8 +565,9 @@ local function PlaceRows(list, first, top, size, line)
         row:SetPoint("TOPLEFT", box, "TOPLEFT", PADDING, -row.offset)
         row:SetPoint("TOPRIGHT", box, "TOPRIGHT", -PADDING, -row.offset)
         Fill(row, item, size, line)
-        if item.remove then
-            hitRows[#hitRows + 1] = row
+        local list = item.drag and dragRows[item.drag]
+        if list then
+            list[#list + 1] = row
         end
     end
     return first + #list
@@ -596,7 +607,7 @@ local function Render()
         objectiveRow:Hide()
     end
     local spots = Layout(box)
-    hitRows = {line = line}
+    dragRows = {added = {}, targets = {}, line = line}
     local used = PlaceRows(spots.quest, 0, spots.rowsTop, size, line)
     used = PlaceRows(spots.hit, used, spots.hitTop or 0, size, line)
     for index = used + 1, #rows do

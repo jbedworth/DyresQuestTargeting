@@ -3,6 +3,13 @@
 Player-facing changes for each Dyre's Quest Targeting release, newest first. The
 release builder puts the matching section at the top of each release's notes.
 
+## 1.7.0
+
+### Features
+
+- Drag a quest target up or down in the Quest Target Box to change its priority, as with the hit list. DQT keeps your order for that quest until it leaves your quest log.
+- "Smart targeting mode" (on by default): the macro now wants rare and named mobs first, then the mobs that drop the quest's items (highest drop rate first, across all of the quest's items), then the mobs you kill for it. Turn it off for the quest's own order. An order you drag wins over both.
+
 ## 1.6.1
 
 ### Fixes

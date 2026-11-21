@@ -75,7 +75,9 @@ local function questieDB(data, contract)
         RequireContract = function(required) return required <= (contract or 4) end,
         Quest = {objectives = reader(data.quests, "objectives"), finishedBy = reader(data.quests, "finishedBy"),
             startedBy = reader(data.quests, "startedBy")},
-        Npc = {name = function(id) return data.npcs[id] end},
+        Npc = {name = function(id) return data.npcs[id] end,
+            rank = function(id) return (data.ranks or {})[id] or 0 end,
+            spawns = function(id) return (data.spawns or {})[id] or {} end},
         Item = {name = reader(data.items, "name"), npcDrops = reader(data.items, "drops")},
     }
 end
@@ -723,7 +725,7 @@ local CONDOR_QUEST = {[101] = {title = "The Condor Hunt", objectives = {
 
 test("logs in with a banner and makes the character macro", function()
     local state = fixture()
-    contains(state.messages[1], "DQT: Dyre's Quest Targeting 1.6.1 by Dyre")
+    contains(state.messages[1], "DQT: Dyre's Quest Targeting 1.7.0 by Dyre")
     equal(state.said("Ready."), true)
     equal(state.dqt.available, true)
     contains(state.macro(), "nothing to target")
@@ -1209,9 +1211,9 @@ test("with QuestieDB, item objectives target the mobs that drop the item", funct
     local state = fixture({db = DB, focus = 101, quests = {[101] = {title = "Silk", objectives = {
         objective("Dire Condor slain: 0/8"), objective("Tarantula Silk: 0/6", "item")}}}})
     local body = state.macro()
-    contains(body, "/targetexact Venomous Tarantula\n/targetexact Cave Tarantula\n/targetexact Giant Tarantula\n"
-        .. "/targetexact Tarantula\n/targetexact Dire Condor\n",
-        "without drop rates, QuestieDB's order, its first dropper last (most wanted)")
+    contains(body, "/cleartarget\n/targetexact Dire Condor\n/targetexact Venomous Tarantula\n"
+        .. "/targetexact Cave Tarantula\n/targetexact Giant Tarantula\n/targetexact Tarantula\n",
+        "smart order (the default): droppers before kills; without drop rates, QuestieDB's order, its first dropper last")
     state.clear()
     state.slash("list")
     equal(state.said("Dire Condor (kill objective"), true)
@@ -1972,7 +1974,7 @@ test("box: clicks pass through all but the buttons, the header, and the section 
     local title = boxRow(state, "Targets, most wanted first")
     equal(title.mouseClicks, true, "a section title takes clicks")
     local target = boxRow(state, "Dire Condor")
-    equal(target.mouseClicks, false, "a target row: clicks pass through to the world")
+    equal(target.mouseClicks, true, "a target row takes clicks, to drag it")
     equal(target.mouseMotion, true, "the mouse-over shows cut text")
     local hit = boxRow(state, "Goretusk")
     equal(hit.mouseClicks, true, "a hit list row takes clicks, to drag it")
@@ -1987,6 +1989,7 @@ end)
 
 test("box: the header, then the targets most wanted first, with a rate column", function()
     local state = fixture(SILK_RATES)
+    state.settings.DQT_SMART_ORDER:SetValue(false)
     local lines = boxLines(state)
     equal(lines[1], "Silk (Focus)")
     equal(lines[2], "Targets, most wanted first (5)")
@@ -2545,13 +2548,155 @@ test("box: drag a hit list row to reorder it; the macro follows the new priority
     state.cursorX = -1000
     row.scripts.OnDragStop(row)
     equal(hitNames(state), "Goretusk,Boar,Wolfie", "a drop outside the box cancels")
-    -- The X still removes; a target row does not reorder.
+    -- The X still removes.
     removeButton(state, "Boar"):Click()
     equal(hitNames(state), "Goretusk,Wolfie")
-    local target = boxRow(state, "Dire Condor")
-    target.scripts.OnDragStart(target)
-    equal(target.scripts.OnUpdate, nil, "a target row is not dragged")
 end)
+
+-- The quest's own order: rare mobs, loot first, and the player's drag.
+local ORDER_DB = {
+    quests = {[301] = {objectives = {{{61, nil, 13}, {62, nil, 5}}, nil, {{70, nil, 1}}}}},
+    npcs = {[61] = "Marine", [62] = "Sailor", [63] = "First Mate Snellig", [64] = "Anaya"},
+    items = {[70] = {name = "Snuffbox", drops = {63}}},
+    spawns = {[61] = {[1] = {{1, 1}, {2, 2}, {3, 3}, {4, 4}}}, [62] = {[1] = {{1, 1}, {2, 2}, {3, 3}, {4, 4}}},
+        [63] = {[1] = {{5, 5}}}},
+}
+local CURSED_CREW = {[301] = {title = "The Cursed Crew", objectives = {objective("Marine slain: 0/13"),
+    objective("Sailor slain: 0/5"), objective("Snuffbox: 0/1", "item")}}}
+
+local function questTargets(state)
+    local names = {}
+    for _, line in ipairs(lines(state.macro())) do
+        local name = line:match("^/targetexact (.+)$")
+        if name then table.insert(names, 1, name) end
+    end
+    return table.concat(names, ",")
+end
+
+test("order: smart target order by default, droppers before kills; off, the quest's own order", function()
+    local db = {quests = ORDER_DB.quests, npcs = ORDER_DB.npcs, items = ORDER_DB.items}
+    local state = fixture({db = db, focus = 301, quests = CURSED_CREW})
+    equal(state.env.DyresQuestTargetingDB.smartOrder, true, "on by default")
+    equal(questTargets(state), "First Mate Snellig,Marine,Sailor", "most wanted first: the loot")
+    state.settings.DQT_SMART_ORDER:SetValue(false)
+    equal(questTargets(state), "Marine,Sailor,First Mate Snellig", "the quest's own order")
+    local repaired = fixture({saved = {smartOrder = "yes"}})
+    equal(repaired.env.DyresQuestTargetingDB.smartOrder, true, "repaired on load")
+end)
+
+test("order: a rare mob (QuestieDB's rank, or one to three spawn points) comes first", function()
+    local quests = {[302] = {title = "Pendant", objectives = {objective("Marine slain: 0/8"),
+        objective("Anaya slain: 0/1")}}}
+    local db = {quests = {[302] = {objectives = {{{61}, {64}}}}}, npcs = ORDER_DB.npcs, items = {},
+        spawns = ORDER_DB.spawns, ranks = {[64] = 4}}
+    local state = fixture({db = db, focus = 302, quests = quests})
+    equal(questTargets(state), "Anaya,Marine", "rank 4 (rare)")
+    db.ranks = {}
+    db.spawns = {[61] = ORDER_DB.spawns[61], [64] = {[1] = {{1, 1}}, [2] = {{2, 2}}}}
+    state = fixture({db = db, focus = 302, quests = quests})
+    equal(questTargets(state), "Anaya,Marine", "two spawn points in all")
+    db.spawns = {[61] = ORDER_DB.spawns[61]}
+    state = fixture({db = db, focus = 302, quests = quests})
+    equal(questTargets(state), "Marine,Anaya", "no spawn data: not rare, the quest's order")
+    -- A rare kill target comes before the droppers.
+    local crew = fixture({db = {quests = ORDER_DB.quests, npcs = ORDER_DB.npcs, items = ORDER_DB.items,
+        ranks = {[62] = 4}}, focus = 301, quests = CURSED_CREW})
+    equal(questTargets(crew), "Sailor,First Mate Snellig,Marine", "the rare Sailor, then the dropper, then the kills")
+    crew.settings.DQT_SMART_ORDER:SetValue(false)
+    equal(questTargets(crew), "Marine,Sailor,First Mate Snellig", "off: the quest's own order, rare or not")
+end)
+
+test("order: smart order ranks every item's droppers together by drop rate", function()
+    local quests = {[303] = {title = "Two items", objectives = {objective("Marine slain: 0/5"),
+        objective("Snuffbox: 0/1", "item"), objective("Rum: 0/4", "item")}}}
+    local db = {quests = {[303] = {objectives = {{{61}}, nil, {{70}, {71}}}}}, npcs = ORDER_DB.npcs,
+        items = {[70] = {name = "Snuffbox", drops = {62, 65}}, [71] = {name = "Rum", drops = {66}}}}
+    db.npcs = {[61] = "Marine", [62] = "Sailor", [65] = "Cook", [66] = "Drunk"}
+    local state = fixture({db = db, focus = 303, quests = quests,
+        questie = {rates = {[70] = {[62] = 5}, [71] = {[66] = 40}}}})
+    equal(questTargets(state), "Drunk,Sailor,Cook,Marine",
+        "40% (Rum) before 5% (Snuffbox), no known rate after them, then the kill")
+    state.settings.DQT_SMART_ORDER:SetValue(false)
+    equal(questTargets(state), "Marine,Sailor,Cook,Drunk", "off: objective by objective")
+end)
+
+-- The quest target names the box shows, most wanted first.
+local function targetRows(state)
+    local names = {}
+    for _, line in ipairs(boxLines(state)) do
+        local name = line:match("^(.-) kill objective") or line:match("^(.-) drops ")
+        if name then names[#names + 1] = name end
+    end
+    return table.concat(names, ",")
+end
+
+test("order: drag a target row; the order is saved for that quest and wins over the defaults", function()
+    local db = {quests = ORDER_DB.quests, npcs = ORDER_DB.npcs, items = ORDER_DB.items}
+    local state = fixture({db = db, focus = 301, quests = CURSED_CREW, saved = {added = {{name = "Goretusk"}}}})
+    equal(targetRows(state), "First Mate Snellig,Marine,Sailor")
+    -- Sailor (3rd) to the top: dropped above the first target row's middle.
+    equal(dragRow(state, "Sailor", boxRow(state, "First Mate Snellig").offset + 1), true, "the insertion line")
+    equal(targetRows(state), "Sailor,First Mate Snellig,Marine")
+    equal(questTargets(state), "Sailor,First Mate Snellig,Marine", "the macro follows")
+    local body = state.macro()
+    equal(body:find("/tar Goretusk", 1, true) > body:find("/targetexact Sailor", 1, true), true,
+        "the hit list still wins (its line is last)")
+    local saved = state.env.DyresQuestTargetingDB.targetOrder["301"]
+    equal(table.concat(saved, ","), "Sailor,First Mate Snellig,Marine", "saved by quest ID, most wanted first")
+    equal(hitNames(state), "Goretusk", "the hit list is not touched")
+    -- The setting does not undo the player's order.
+    state.settings.DQT_SMART_ORDER:SetValue(false)
+    equal(targetRows(state), "Sailor,First Mate Snellig,Marine", "the player's order wins over the setting")
+    -- Marine (3rd) below the last target row; a drop outside the box cancels.
+    dragRow(state, "First Mate Snellig", boxRow(state, "Marine").offset + boxRow(state, "Marine").height * 0.9)
+    equal(targetRows(state), "Sailor,Marine,First Mate Snellig")
+    local row = boxRow(state, "Sailor")
+    row.scripts.OnDragStart(row)
+    state.cursorX = -1000
+    row.scripts.OnDragStop(row)
+    equal(targetRows(state), "Sailor,Marine,First Mate Snellig", "cancelled")
+    -- A finished objective drops out; the others keep the player's order.
+    CURSED_CREW[301].objectives[1] = objective("Marine slain: 13/13", "monster", true)
+    state.emit("QUEST_LOG_UPDATE")
+    state.advance()
+    equal(targetRows(state), "Sailor,First Mate Snellig")
+    CURSED_CREW[301].objectives[1] = objective("Marine slain: 0/13")
+end)
+
+test("order: per character, repaired on load, and pruned when its quest leaves the log", function()
+    local repaired = fixture({saved = {targetOrder = {["301"] = {"Marine", "Bad;Name", "marine", 5}, [7] = {"X"},
+        ["9"] = "x", ["8"] = {}}}})
+    local orders = repaired.env.DyresQuestTargetingDB.targetOrder
+    equal(table.concat(orders["301"], ","), "Marine", "bad names and doubles dropped")
+    equal(orders[7], nil)
+    equal(orders["9"], nil)
+    equal(orders["8"], nil, "an empty order is dropped")
+    local db = {quests = ORDER_DB.quests, npcs = ORDER_DB.npcs, items = ORDER_DB.items}
+    local state = fixture({db = db, focus = 301, quests = CURSED_CREW,
+        saved = {targetOrder = {["999"] = {"Gone"}, ["zygor old"] = {"Old"}}}})
+    dragRow(state, "Sailor", boxRow(state, "First Mate Snellig").offset + 1)
+    orders = state.env.DyresQuestTargetingDB.targetOrder
+    equal(orders["999"], nil, "a quest no longer in the log")
+    equal(orders["zygor old"], nil, "another guide step")
+    equal(orders["301"] ~= nil, true)
+    local keys = state.dqt.PROFILE_CHARACTER_KEYS
+    if keys then contains(table.concat(keys, ","), "targetOrder") end
+end)
+
+test("order: a target reorder in combat changes the box at once; the macro waits", function()
+    local db = {quests = ORDER_DB.quests, npcs = ORDER_DB.npcs, items = ORDER_DB.items}
+    local state = fixture({db = db, focus = 301, quests = CURSED_CREW})
+    local before = state.macro()
+    state.combat = true
+    dragRow(state, "Sailor", boxRow(state, "First Mate Snellig").offset + 1)
+    equal(targetRows(state), "Sailor,First Mate Snellig,Marine")
+    equal(state.last(), "DQT: Moved Sailor in the quest's targets. The macro updates after combat.")
+    equal(state.macro(), before, "the macro waits")
+    state.combat = false
+    state.emit("PLAYER_REGEN_ENABLED")
+    equal(questTargets(state), "Sailor,First Mate Snellig,Marine")
+end)
+
 
 test("box: a reorder in combat changes the list at once; the macro waits", function()
     local saved = {added = {{name = "Goretusk"}, {name = "Boar"}}}
@@ -3759,6 +3904,17 @@ test("profile: export and import carry DQT's settings, not the hit list", functi
     equal(state.toolkitNS.profile:Import(line), true)
     equal(db.mobMarker, 6)
     contains(state.macro(), "!6")
+end)
+
+test("profile: the target order stays with the character", function()
+    local part = {targetOrder = {["301"] = {"Marine"}}}
+    local state = fixture({quests = TWO_QUESTS, focus = 1, toolkitDB = otherProfile(part),
+        saved = {targetOrder = {["1"] = {"Boar"}}}})
+    equal(state.toolkitNS.profile:CopyFrom(OTHER), true)
+    local orders = state.env.DyresQuestTargetingDB.targetOrder
+    equal(orders["1"][1], "Boar", "this character's order stays")
+    equal(orders["301"], nil, "the other character's is not copied")
+    lacks(state.toolkitNS.profile:Export(), "Boar", "nor exported")
 end)
 
 local function zway(x, y, fields)

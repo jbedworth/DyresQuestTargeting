@@ -109,7 +109,28 @@ prefix `DQT:`. Listings say plainly that it is for WoW: Forever.
   public API: a Questie update can change it, and DQT then falls back to the
   game's focus. Not the tracked (watched) quests.
 - Quest names always use `/targetexact` (author-approved, no setting).
-- Unfinished objectives, the first objective last (most important). Kill
+- Unfinished objectives, in this order (most important first; the macro lists
+  them the other way, as its last line wins):
+  - "Smart targeting mode" (`db.smartOrder`, default on; author-named; author, 1.7.0: "1) named/
+    rare or npc targets (kill, talk, or gather) go first 2) gather quest mobs
+    sorted by drop rate (highest on top) 3) kill quest mobs 4) everything
+    else"): rare or named mobs (`IsRare`: QuestieDB `Npc.rank` 2 rare elite, 3
+    boss, or 4 rare, or 1 to 3 spawn points in `Npc.spawns`; none known is not
+    rare), then every item's droppers together by drop rate (no rate after
+    them), then kill targets, then the rest; ties keep the quest's order.
+    QuestieDB gives no order for a quest's objectives (checked, 1.7.0), and a
+    guide step keeps its guide's order. Off: the quest's own order, the first
+    objective most important, each item's droppers by rate.
+  - A player's order (author, 1.7.0: "allowing the user to set whatever order
+    they want"): dragging a target row in the box saves the whole order of the
+    quest's names, most wanted first, in `db.targetOrder[key]` (`TargetOrderKey`:
+    the quest ID, or a guide step's own key, as a string). It wins over both
+    (`ApplyTargetOrder`, after the quest's targets are built); names it does not
+    list keep their place before the listed ones. Kept per character
+    (`characterKeys`), repaired on load, and pruned at the next drag (not at
+    login, when the log may not be loaded): another guide step's, or a quest no
+    longer in the log.
+  Kill
   objectives (`monster`): the client's text gives the name, read with the
   client's own formats (1.6.1): `QUEST_MONSTERS_KILLED`, then
   `QUEST_OBJECTS_FOUND`, turned into Lua patterns (pattern characters escaped,
@@ -430,7 +451,7 @@ in this order: "Follow Questie's tracker focus", "Follow Zygor's current
 step", "Follow RestedXP's current step", "Follow QuestTrail's current step", "Active
 guide", "Keep Questie's and the game's focus in sync", and "Point TomTom at the focused
 quest". Above it, the macro's own settings: the switch, the
-markers, the opener, and the account-wide macro. Only the place changed:
+markers, the opener, the account-wide macro, and "Smart targeting mode". Only the place changed:
 saved keys, defaults, greying, and dependencies stay.
 
 Without their AddOns (author, 1.1.1), "Follow Questie's tracker focus" and
@@ -503,8 +524,9 @@ minimap menu, and widgets (contract 2). The Quest Target box is a widget.
   the box's switch, style, start folds, and `box`: its place, sizes, opacity, and
   folds). `characterKeys` (never copied, exported, or imported): `added`, the hit
   list (live data: the mobs of this character's quests and places; author,
-  2026-11-20: "Hit list stays with the character that owns it.") and `opener`
-  (a spell of this character's spellbook; another class's spell would do nothing).
+  2026-11-20: "Hit list stays with the character that owns it."), `opener`
+  (a spell of this character's spellbook; another class's spell would do nothing),
+  and `targetOrder` (this character's quests).
   The macro's name is a constant, not saved. No account table. `ApplyProfile`
   (live, no reload): the toolkit's `ReapplyWidgets` for the box, `ApplyBoxStyle`,
   then `SelectGuide(db.activeGuide)`, which rebuilds the macro (a write in combat
@@ -575,10 +597,12 @@ minimap menu, and widgets (contract 2). The Quest Target box is a widget.
   popup); disabled and desaturated when empty; tooltip "Clear the hit
   list."
 - Reordering (author): drag a hit list row up or down to change its
-  priority; the target rows keep their order (drop rate order). The box
+  priority, and (1.7.0) a target row within the targets the same way
+  (`DQT.MoveTarget`, saved per quest; see "Names"). The box
   shows the most wanted first; `db.added` keeps it last (`DQT.MoveAdded`
-  maps the box's place to the saved one). Hit list rows take clicks (to
-  start the drag) and are not drag handles of the box. While dragging, the
+  maps the box's place to the saved one). Hit list and target rows take clicks (to
+  start the drag) and are not drag handles of the box; a row is dropped only
+  within its own list (`dragRows.added`, `dragRows.targets`). While dragging, the
   row dims and a thin gold line shows the drop place, placed by an
   `OnUpdate` set only for the drag (on its start, cleared on its stop; not
   idle). The drop area is the whole box (author): anywhere above the first
@@ -594,7 +618,7 @@ minimap menu, and widgets (contract 2). The Quest Target box is a widget.
   in a tooltip on mouse-over (`FontString:IsTruncated`). Rows take the
   mouse-over only (`SetMouseClickEnabled(false)`), so clicks pass through
   them to the world; the footer icons, the red X, the header, the section
-  titles, and the hit list rows take clicks.
+  titles, and the hit list and target rows take clicks.
 - Folding (author: "clicking the section titles should expand/collapse that
   section; the +/- at the top should expand/collapse all"): the header, the
   quest's title, folds the quest's part (its sections; the objective line

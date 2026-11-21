@@ -15,6 +15,13 @@ local MAX_KILL_CREDIT = 3
 local MAX_TURN_IN = 2
 -- QuestieDB objective lists by index (its Types/General.t.lua).
 local DB_CREATURES, DB_ITEMS, DB_KILL_CREDIT = 1, 3, 5
+-- A rare mob comes first by default (author: "I always go for the rarer mobs
+-- first"). QuestieDB gives no order for a quest's objectives, only the quest's
+-- own; but each NPC has a rank (Enum.npcRanks, cmangos creature_template: 2 rare
+-- elite, 3 boss, 4 rare) and its spawn points ({[zone] = {{x, y}, ...}}). A
+-- named mob with one spawn, such as a quest's leader, is rare in the same way.
+local RARE_RANKS = {[2] = true, [3] = true, [4] = true}
+local RARE_SPAWN_POINTS = 3
 
 -- QuestieDB's reads, or nil and the reason it cannot be used.
 local function Database()
@@ -270,6 +277,69 @@ local function DropNames(db, entries, text)
     return {}
 end
 
+-- Rare by QuestieDB's rank or spawn points (an NPC with none known is not).
+local function IsRare(db, id)
+    if not db or type(id) ~= "number" then
+        return false
+    end
+    local rank = type(db.npc.rank) == "function" and db.npc.rank(id)
+    if type(rank) == "number" and RARE_RANKS[rank] then
+        return true
+    end
+    local spawns = type(db.npc.spawns) == "function" and db.npc.spawns(id)
+    local points = 0
+    for _, zone in pairs(type(spawns) == "table" and spawns or {}) do
+        points = points + (type(zone) == "table" and #zone or 0)
+    end
+    return points > 0 and points <= RARE_SPAWN_POINTS
+end
+
+-- "Smart targeting mode" (db.smartOrder, author-approved, default on), most wanted
+-- first: 1, rare or named mobs; 2, the mobs that drop the quest's items, by drop
+-- rate, highest first (no known rate after them); 3, the mobs to kill; 4, anything
+-- else. Ties keep the quest's own order. Off: the quest's own order, each item's
+-- droppers by rate. A player's drag in the box wins over both (ApplyTargetOrder).
+local SMART_RARE, SMART_DROP, SMART_KILL, SMART_OTHER = 1, 2, 3, 4
+
+-- Targets, most wanted first, in the quest's own order: the objectives in order,
+-- and each objective's targets (kept least wanted first) from its last.
+local function QuestOrder(groups)
+    local list = {}
+    for index = 1, table.maxn(groups) do
+        local group = groups[index] or {}
+        for position = #group, 1, -1 do
+            list[#list + 1] = group[position]
+        end
+    end
+    return list
+end
+
+local function SmartOrder(db, list)
+    local class, place = {}, {}
+    for index, target in ipairs(list) do
+        place[target] = index
+        if IsRare(db, target.id) then
+            class[target] = SMART_RARE
+        elseif target.source == "drop" then
+            class[target] = SMART_DROP
+        elseif target.source == "kill" then
+            class[target] = SMART_KILL
+        else
+            class[target] = SMART_OTHER
+        end
+    end
+    table.sort(list, function(a, b)
+        if class[a] ~= class[b] then
+            return class[a] < class[b]
+        end
+        if class[a] == SMART_DROP and (a.rate or -1) ~= (b.rate or -1) then
+            return (a.rate or -1) > (b.rate or -1)
+        end
+        return place[a] < place[b]
+    end)
+    return list
+end
+
 -- With onlyIndex, that one objective (Questie's objective focus).
 local function ObjectiveTargets(db, questID, onlyIndex)
     local objectives = C_QuestLog.GetQuestObjectives(questID)
@@ -294,12 +364,14 @@ local function ObjectiveTargets(db, questID, onlyIndex)
             groups[index] = group
         end
     end
-    -- The first objective matters most, and the macro's last line wins.
+    local wanted = QuestOrder(groups)
+    if DQT.db and DQT.db.smartOrder then
+        SmartOrder(db, wanted)
+    end
+    -- The macro's last line wins, so the most wanted target goes last.
     local targets = {}
-    for index = table.maxn(groups), 1, -1 do
-        for _, target in ipairs(groups[index] or {}) do
-            targets[#targets + 1] = target
-        end
+    for index = #wanted, 1, -1 do
+        targets[#targets + 1] = wanted[index]
     end
     return targets
 end
@@ -1204,7 +1276,7 @@ local function DecidePendingFocus()
 end
 
 -- The focused quest and its targets, ordered least to most important, or nil.
-function DQT.FocusedQuest()
+local function BuildFocusedQuest()
     local db = Database()
     NoteRxpStep()
     NoteQtrStep()
@@ -1262,6 +1334,53 @@ function DQT.FocusedQuest()
         quest.targets = ObjectiveTargets(db, questID, objectiveIndex)
     end
     return quest
+end
+
+-- The key a player's order is saved under: the quest ID, or a guide step's own key.
+function DQT.TargetOrderKey(quest)
+    return type(quest) == "table" and quest.id ~= nil and tostring(quest.id) or nil
+end
+
+-- A player's order for this quest (author: drag the target rows, "allowing the user
+-- to set whatever order they want"; it wins over the default and the loot-first
+-- setting). db.targetOrder[key] lists names most wanted first; those go last, in
+-- that order, and names it does not list keep their place before them.
+local function ApplyTargetOrder(quest)
+    local key = DQT.TargetOrderKey(quest)
+    local order = key and DQT.db and DQT.db.targetOrder[key]
+    if not order then
+        return quest
+    end
+    local rank = {}
+    for index, name in ipairs(order) do
+        rank[name:lower()] = rank[name:lower()] or index
+    end
+    local unlisted, listed = {}, {}
+    for index, target in ipairs(quest.targets) do
+        target.listIndex = index
+        if rank[target.name:lower()] then
+            listed[#listed + 1] = target
+        else
+            unlisted[#unlisted + 1] = target
+        end
+    end
+    table.sort(listed, function(a, b)
+        local rankA, rankB = rank[a.name:lower()], rank[b.name:lower()]
+        if rankA ~= rankB then
+            return rankA > rankB
+        end
+        return a.listIndex < b.listIndex
+    end)
+    for _, target in ipairs(listed) do
+        unlisted[#unlisted + 1] = target
+    end
+    quest.targets = unlisted
+    return quest
+end
+
+function DQT.FocusedQuest()
+    local quest = BuildFocusedQuest()
+    return quest and ApplyTargetOrder(quest)
 end
 
 -- Questie's tracker menu calls this after a focus change (TrackerMenu.lua):

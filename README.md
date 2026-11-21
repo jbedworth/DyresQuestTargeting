@@ -35,7 +35,11 @@ from Forever's own quest journal instead of a guide.
   [With Zygor](#with-zygor).
 - **RestedXP's guide step** (with RestedXP, experimental): the same, for the
   names on its current and sticky steps. See [With RestedXP](#with-restedxp).
-- **Kill objectives** it still needs, the first objective first.
+- **Kill objectives** it still needs. With **Smart targeting mode** (on by
+  default) and QuestieDB, rare and named mobs come first, then the mobs that
+  drop the quest's items (highest drop rate first), then the mobs to kill.
+  Off, the quest's own order: the first objective first. Drag a target in the
+  Quest Target box to set your own order for a quest.
 - With **QuestieDB** installed (its own CurseForge project; the CurseForge
   app installs it with DQT), also the mobs that **drop the quest's items** (with Questie, the six
   best by Questie's drop rates, the best one wanted most; `/dqt list` shows each
@@ -121,8 +125,9 @@ letters, and your hit list. Hover over a cut-off row ("...") to read all of
 it.
 
 Each hit list name has a red X to remove it; drag a name up or down to
-change its priority (the top one is the most wanted). The targets stay in
-their own order, best drop rate first. The "Hit list" bar is the hit
+change its priority (the top one is the most wanted). Drag a target the same
+way to set your own order for the focused quest; it wins over Smart targeting
+mode, and DQT forgets it when the quest leaves your log. The "Hit list" bar is the hit
 list's title: its names show under it. It always shows, also when the box
 is folded: the plus on the left adds your
 target (Shift-click for the exact name; with no target, a small box opens to
@@ -309,8 +314,10 @@ Questie's own code, not a public API.
   character is logged in. Do not use it if you play two characters at once.
   After switching, put the new macro on your bars and delete the old one;
   DQT leaves the other one alone and says so.
-- Without QuestieDB, a kill objective's name comes from its English text
-  ("Dire Condor slain: 0/8"). QuestieDB's names are English too.
+- Without QuestieDB, a kill objective's name comes from its text in the
+  client's language ("Dire Condor slain: 0/8"). QuestieDB has its names in the
+  client's language too. RestedXP's guide names are in English unless RestedXP
+  has a translation, so on other clients some of them target no one.
 - Another AddOn that sets the game's focus keeps taking over the focus: disable
   it. That includes RestedXP's guides (even with the window hidden) when
   "Follow RestedXP's current step" is off.

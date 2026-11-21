@@ -103,6 +103,16 @@ With `/dqt debug` for details:
    Forever's mobs.
 7. `/dqt add Goretusk` finds Great Goretusk; `/dqt add_exact` does not.
    `/dqt add` with a dead mob targeted adds its name.
+36. Target order (QuestieDB, Questie): focus a quest with a rare or one-spawn
+    named mob and an item objective, such as The Cursed Crew (First Mate
+    Snellig's Snuffbox). With "Smart targeting mode" on, the box lists the named
+    mob first, then the droppers (highest rate first), then the kills; off, the
+    quest's own order. Drag a target row up and down: the gold line shows the
+    drop place, the box and the macro follow, the order stays after `/reload`
+    and with the setting switched, and a drop outside the box cancels. In
+    combat, the box changes at once and chat says the macro updates after
+    combat. Abandon or turn in the quest, then drag on another quest: the old
+    order is gone from the saved variables. No Lua errors.
 35. Profile (Dyre's Toolkit 2.10.0 or newer, two characters): on the first,
     set a mob marker, the box's style and width, and add a hit list name; move
     the box. On the second, with its own hit list and opener: on Dyre's Toolkit's

@@ -126,7 +126,7 @@ end
 local REQUIRED_NAMESPACE = {"ParseCommand", "HandleCommand", "FocusedQuest", "GameFocusChanged", "WorldLoading",
     "WorldEntered", "HookQuestieFocus", "QuestieFocusAvailable", "HookZygor", "ZygorAvailable", "HookRxp", "RxpAvailable",
     "HookQuestTrail", "QuestTrailAvailable", "QuestAccepted", "ActiveGuide", "SelectGuide", "Resync", "ResyncAvailable",
-    "SyncFocus",
+    "SyncFocus", "TargetOrderKey",
     "PointTomTom",
     "ReportQuestDebug", "BuildMacro",
     "WriteMacro", "FlushMacro", "ReportMacroDebug", "CreateBox", "UpdateBox", "InitializeOptions", "OpenSettings"}
@@ -301,6 +301,27 @@ local function SanitizeAdded(list)
     return clean
 end
 
+-- A player's target order per quest: {[key] = {name, ...}}, most wanted first.
+local function SanitizeTargetOrder(orders)
+    local clean = {}
+    for key, list in pairs(type(orders) == "table" and orders or {}) do
+        if type(key) == "string" and type(list) == "table" then
+            local names, seen = {}, {}
+            for _, name in ipairs(list) do
+                name = DQT.CheckName(name)
+                if name and not seen[name:lower()] then
+                    seen[name:lower()] = true
+                    names[#names + 1] = name
+                end
+            end
+            if #names > 0 then
+                clean[key] = names
+            end
+        end
+    end
+    return clean
+end
+
 -- Per-character settings in DyresQuestTargetingDB (each character has its own
 -- macro and its own hit list), repaired on load so a damaged or older
 -- table can never break the AddOn.
@@ -341,6 +362,11 @@ function DQT.SanitizeDB(db)
     db.mobMarker = SanitizeMarker(db.mobMarker, DQT.DEFAULT_MOB_MARKER)
     db.npcMarker = SanitizeMarker(db.npcMarker, DQT.DEFAULT_NPC_MARKER)
     db.added = SanitizeAdded(db.added)
+    -- "Smart targeting mode" (author-approved, default on): rare, droppers, kills.
+    if type(db.smartOrder) ~= "boolean" then
+        db.smartOrder = true
+    end
+    db.targetOrder = SanitizeTargetOrder(db.targetOrder)
     if type(db.showBox) ~= "boolean" then
         db.showBox = true
     end
@@ -584,6 +610,54 @@ function DQT.MoveAdded(name, position)
     end
 end
 
+-- A saved order whose quest left your log, or another guide step's, is no longer
+-- wanted. Pruned when you drag (the quest log is loaded then; at login it may not be).
+local function PruneTargetOrders(keep)
+    for key in pairs(DQT.db.targetOrder) do
+        local questID = tonumber(key)
+        if key ~= keep and not (questID and DQT.QuestLogIndex(questID)) then
+            DQT.db.targetOrder[key] = nil
+        end
+    end
+end
+
+-- A quest target to a new place, counted as the box shows the targets: 1 is the
+-- most wanted. The whole order is saved for this quest (author: it wins over the
+-- quest's own order and "Smart targeting mode").
+function DQT.MoveTarget(name, position)
+    local current = DQT.current
+    local key = current and DQT.TargetOrderKey(current.quest)
+    if not key or type(name) ~= "string" then
+        return
+    end
+    local order, from = {}, nil
+    local function Note(target)
+        if target.source ~= "added" then
+            order[#order + 1] = target.name
+            if target.name:lower() == name:lower() then
+                from = #order
+            end
+        end
+    end
+    for index = #current.kept, 1, -1 do
+        Note(current.kept[index])
+    end
+    for _, target in ipairs(current.dropped) do
+        Note(target)
+    end
+    if not from then
+        return
+    end
+    local moved = table.remove(order, from)
+    table.insert(order, math.max(1, math.min(#order + 1, position)), moved)
+    PruneTargetOrders(key)
+    DQT.db.targetOrder[key] = order
+    DQT.Refresh()
+    if InCombatLockdown() then
+        DQT.Report("Moved " .. moved .. " in the quest's targets. The macro updates after combat.")
+    end
+end
+
 function DQT.ResetAdded()
     local count = #DQT.db.added
     DQT.db.added = {}
@@ -702,10 +776,10 @@ BINDING_NAME_DQT_RESYNC = "Re-sync with your active guide"
 
 -- Dyre's Toolkit Profile (Toolkit 2.10.0; John, 2026-11-15): the toolkit keeps a
 -- copy of this character's settings, to copy to another character, export, and
--- import; DQT keeps its live settings here. Two keys stay with this character:
--- the hit list (mobs of this character's quests and places) and the opener (a
--- spell from this character's spellbook). The macro's name is fixed, not saved.
-local PROFILE_CHARACTER_KEYS = {"added", "opener"}
+-- import; DQT keeps its live settings here. Three keys stay with this character:
+-- the hit list (mobs of this character's quests and places), the opener (a
+-- spell from this character's spellbook), and the target order of its quests.
+local PROFILE_CHARACTER_KEYS = {"added", "opener", "targetOrder"}
 local profileJoined = false
 
 -- A copy or import, written into DyresQuestTargetingDB in place: the box takes

@@ -299,6 +299,10 @@ function DQT.InitializeOptions()
             .. "account-wide macro, for when character slots run short; DQT rewrites it for whichever character "
             .. "is logged in. Not for playing two characters at once: they would rewrite it in turn. After "
             .. "switching, put the new macro on your bars and delete the old one.")
+    Flag("DQT_SMART_ORDER", "Smart targeting mode", "smartOrder", true,
+        "On (the default): the macro wants rare and named mobs first, then the mobs that drop the quest's "
+            .. "items (highest drop rate first), then the mobs you kill for it. Off: the quest's own order. An "
+            .. "order you drag in the Quest Target Box wins over both.")
     -- Every integration with another AddOn, under one heading that says
     -- "(Experimental)" (author, 1.3.0); the names do not.
     Heading(INTEGRATIONS_HEADING)
