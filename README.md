@@ -38,8 +38,10 @@ from Forever's own quest journal instead of a guide.
 - **Kill objectives** it still needs. With **Smart targeting mode** (on by
   default) and QuestieDB, rare and named mobs come first, then the mobs that
   drop the quest's items (highest drop rate first), then the mobs to kill.
-  Off, the quest's own order: the first objective first. Drag a target in the
-  Quest Target box to set your own order for a quest.
+  On a guide step, rare and named mobs come first and the rest keep the
+  guide's order. Off, the quest's own order: the first objective first. Drag a
+  target in the Quest Target box to set your own order for a quest, also a name
+  the macro had no room for.
 - With **QuestieDB** installed (its own CurseForge project; the CurseForge
   app installs it with DQT), also the mobs that **drop the quest's items** (with Questie, the six
   best by Questie's drop rates, the best one wanted most; `/dqt list` shows each
@@ -209,7 +211,8 @@ does not install it. A Zygor step often covers several quests in one area, and
 Zygor's Action Bar gives one button per name. DQT puts the whole step behind
 one macro. With Zygor installed, "Follow Zygor's current step" (under
 "Integrations (Experimental)") is on by default; without Zygor it is greyed
-out. DQT reads the step Zygor shows and the sticky steps shown with it, and
+out. DQT reads the step Zygor shows and the sticky steps shown with it (the
+sticky steps' names are the most wanted), and
 targets the mobs to kill (also "from" mobs that drop an item) and the NPCs to
 talk to, for every quest of the step: Zygor itself focuses only the step's
 first quest. Done goals drop out. The guide's first goal is wanted most. A name
@@ -236,7 +239,7 @@ With **RestedXP** installed, "Follow RestedXP's current step" (under
 RestedXP has its own targeting macro and arrow, and DQT leaves them alone. Its
 macro also uses exact names and marks what it finds. DQT's macro adds your hit
 list, your own markers, and the opener, and the box shows it all. It targets the mobs and NPCs on the current step and the
-sticky steps. A name whose objective is done drops out. A new step counts as a
+sticky steps, the sticky steps' first. A name whose objective is done drops out. A new step counts as a
 focus change, so the focus you change last wins; RestedXP setting the game's
 focus to a quest of its own steps does not count. At login, its step wins when
 it names someone (Zygor's first, if you run both). A step that names no one

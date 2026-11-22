@@ -725,7 +725,7 @@ local CONDOR_QUEST = {[101] = {title = "The Condor Hunt", objectives = {
 
 test("logs in with a banner and makes the character macro", function()
     local state = fixture()
-    contains(state.messages[1], "DQT: Dyre's Quest Targeting 1.7.0 by Dyre")
+    contains(state.messages[1], "DQT: Dyre's Quest Targeting 1.7.1 by Dyre")
     equal(state.said("Ready."), true)
     equal(state.dqt.available, true)
     contains(state.macro(), "nothing to target")
@@ -2683,6 +2683,26 @@ test("order: per character, repaired on load, and pruned when its quest leaves t
     if keys then contains(table.concat(keys, ","), "targetOrder") end
 end)
 
+test("order: a name left out of the macro can be dragged up into the targets", function()
+    local db = {quests = ORDER_DB.quests, npcs = ORDER_DB.npcs, items = ORDER_DB.items}
+    local added = {}
+    for _, letter in ipairs({"A", "B", "C", "D"}) do
+        added[#added + 1] = {name = "Long Hit List Name Number " .. letter}
+    end
+    local state = fixture({db = db, focus = 301, quests = CURSED_CREW, saved = {added = added}})
+    local left = state.dqt.current.dropped
+    equal(#left > 0, true, "the macro is full")
+    local name = left[#left].name
+    local row = boxRow(state, name)
+    equal(row.drag, "targets", "a left-out row is a target row to drag")
+    dragRow(state, name, boxRow(state, "First Mate Snellig").offset + 1)
+    equal(state.env.DyresQuestTargetingDB.targetOrder["301"][1], name, "saved most wanted first")
+    contains(state.macro(), "/targetexact " .. name, "now in the macro")
+    for _, target in ipairs(state.dqt.current.dropped) do
+        equal(target.name ~= name, true, "no longer left out")
+    end
+end)
+
 test("order: a target reorder in combat changes the box at once; the macro waits", function()
     local db = {quests = ORDER_DB.quests, npcs = ORDER_DB.npcs, items = ORDER_DB.items}
     local state = fixture({db = db, focus = 301, quests = CURSED_CREW})
@@ -2996,11 +3016,11 @@ end
 local ZYGOR_STICKY = zstep(9, {zgoal({action = "kill", target = "Gnoll Runt"}),
     zgoal({action = "kill", target = "Sticky Boar"})})
 
-test("zygor: the step's open goals and its sticky steps become /targetexact lines, the first goal last", function()
+test("zygor: the step's open goals and its sticky steps become /targetexact lines, the sticky step's first goal last", function()
     local state = fixture({quests = TWO_QUESTS, questie = {focus = 1},
         zygor = {step = zygorStepThree(), stickies = {ZYGOR_STICKY}}})
     local body = state.macro()
-    inOrder(body, {"Sticky Boar", "Forest Spider", "Timber Wolf", "Young Wolf", "Gnoll Runt", "Marshal McBride"})
+    inOrder(body, {"Forest Spider", "Timber Wolf", "Young Wolf", "Marshal McBride", "Sticky Boar", "Gnoll Runt"})
     local _, count = body:gsub("Gnoll Runt", "")
     equal(count, 1, "a name on two steps is one line, at its most important place")
     for _, name in ipairs({"Hogger", "Done Mob", "Hidden Mob", "Defias"}) do
@@ -3122,16 +3142,29 @@ local RXP_SPAWNS = {[40] = {name = "Gnoll Runt", at = {10, 20}, zone = 141, far 
     [42] = {name = "Zenn Foulhoof", at = {50, 60}, zone = 141, far = 9},
     [43] = {name = "Tenaron Stormgrip", at = {70, 80}, zone = 141, far = 7}}
 
+test("guides: in smart mode a guide step's rare mobs come first; off, the guide's order", function()
+    local rare = {quests = RXP_DB.quests, items = RXP_DB.items, npcs = RXP_DB.npcs, ranks = {[42] = 4}}
+    local state = fixture({quests = TWO_QUESTS, questie = {focus = 1}, db = rare,
+        rxp = {steps = {rstep(1, {{mobs = {"Sticky Spider"}}}), rstep(3, {{questId = 2}, {mobs = {"Gnoll Runt"}},
+            {targets = {"Zenn Foulhoof"}}})}}})
+    inOrder(state.macro(), {"Gnoll Runt", "Sticky Spider", "Zenn Foulhoof"})
+    state.settings.DQT_SMART_ORDER:SetValue(false)
+    inOrder(state.macro(), {"Zenn Foulhoof", "Gnoll Runt", "Sticky Spider"})
+    local zygor = fixture({quests = TWO_QUESTS, questie = {focus = 1}, zygor = {step = zygorStepThree()},
+        db = {quests = {}, items = {}, npcs = {[69] = "Timber Wolf"}, ranks = {[69] = 4}}})
+    inOrder(zygor.macro(), {"Forest Spider", "Young Wolf", "Gnoll Runt", "Marshal McBride", "Timber Wolf"})
+end)
+
 local function rxpStepThree()
     return rstep(3, {{questId = 2}, {mobs = {"Gnoll Runt"}}, {unitscan = {"Rare Boar"}},
         {targets = {"Zenn Foulhoof", "70"}}, {mobs = nil, parent = {completed = true}}})
 end
 
-test("rxp: the active steps' tags become /targetexact lines, the current step and its first tag last", function()
+test("rxp: the active steps' tags become /targetexact lines, the sticky steps last (most wanted)", function()
     local sticky = rstep(1, {{mobs = {"Sticky Spider", "Gnoll Runt"}}})
     local state = fixture({quests = TWO_QUESTS, questie = {focus = 1}, db = RXP_DB,
         rxp = {steps = {sticky, rxpStepThree()}}})
-    inOrder(state.macro(), {"Sticky Spider", "Zenn Foulhoof", "Name From ID", "Rare Boar", "Gnoll Runt"})
+    inOrder(state.macro(), {"Zenn Foulhoof", "Name From ID", "Rare Boar", "Sticky Spider", "Gnoll Runt"})
     local _, count = state.macro():gsub("Gnoll Runt", "")
     equal(count, 1, "one line per name, at its most important place")
     lacks(state.macro(), "/targetexact Boar", "RestedXP's step wins at login, over Questie's focus")

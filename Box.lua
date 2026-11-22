@@ -421,8 +421,16 @@ local function Sections()
             targets[#targets + 1] = item
         end
     end
+    -- A left-out name can be dragged up into the targets (author, 1.7.1); its
+    -- place counts on from the targets', as DQT.MoveTarget counts it.
+    local position = #targets
     for _, target in ipairs(current and current.dropped or {}) do
-        dropped[#dropped + 1] = TargetItem(target, true)
+        local item = TargetItem(target, true)
+        if target.source ~= "added" then
+            position = position + 1
+            item.drag, item.entry, item.position = "targets", target.name, position
+        end
+        dropped[#dropped + 1] = item
     end
     if current then
         for index = #DQT.db.added, 1, -1 do

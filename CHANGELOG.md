@@ -3,6 +3,14 @@
 Player-facing changes for each Dyre's Quest Targeting release, newest first. The
 release builder puts the matching section at the top of each release's notes.
 
+## 1.7.1
+
+### Fixes
+
+- Zygor and RestedXP: the mobs of a sticky step now come before the current step's in the macro. Before, a sticky rare such as Anaya Dawnrunner was the first name left out when the macro was full.
+- Smart targeting mode now puts rare and named mobs first on Zygor, RestedXP, and QuestTrail steps too. The other names keep the guide's order.
+- A name under "Not in the macro" in the Quest Target Box can now be dragged up into the targets.
+
 ## 1.7.0
 
 ### Features

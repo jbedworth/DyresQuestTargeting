@@ -118,8 +118,10 @@ prefix `DQT:`. Listings say plainly that it is for WoW: Forever.
     boss, or 4 rare, or 1 to 3 spawn points in `Npc.spawns`; none known is not
     rare), then every item's droppers together by drop rate (no rate after
     them), then kill targets, then the rest; ties keep the quest's order.
-    QuestieDB gives no order for a quest's objectives (checked, 1.7.0), and a
-    guide step keeps its guide's order. Off: the quest's own order, the first
+    QuestieDB gives no order for a quest's objectives (checked, 1.7.0). A
+    guide step (Zygor, RestedXP, QuestTrail) keeps its guide's order, except
+    that its rare or named mobs go first (`RareFirst`; author, 1.7.1: "in smart
+    mode, put the named first"). Off: the quest's own order, the first
     objective most important, each item's droppers by rate.
   - A player's order (author, 1.7.0: "allowing the user to set whatever order
     they want"): dragging a target row in the box saves the whole order of the
@@ -220,8 +222,10 @@ not a public API. Zygor is a paid AddOn: tests mock only its fields.
   unprotected, so DQT's handler only notes the step and asks for a
   rebuild): ZGV_STEP_CHANGED, ZGV_GOAL_COMPLETED, ZGV_GOAL_UNCOMPLETED,
   ZGV_GOAL_PROGRESS, ZGV_GUIDE_LOADED. No polling.
-- Names: the shown steps are the sticky steps (`ZGV.CurrentStickies`, less
-  important; author-approved) and the current step; within a step, goals from last to first,
+- Names: the shown steps are the sticky steps (`ZGV.CurrentStickies`, more
+  important, the first sticky most; author, 1.7.1: "Sticky steps should be
+  higher priority", found in client when a sticky rare was left out of a full
+  macro) and the current step; within a step, goals from last to first,
   so the guide's first goal wins. A goal counts when `goal:GetStatus()` (or
   `goal.status`) is "incomplete" or "passive": Zygor's passive goals include
   "kill Timber Wolf, Young Wolf" beside "collect 8 Tough Wolf Meat"
@@ -304,8 +308,10 @@ not a public API. Tests mock only its fields, with no guide text.
 - Names: `step.elements[i].unitscan` and `.mobs` (source "kill") and `.targets`
   (source "talk"), as its UpdateUnitList reads them, through
   `addon.GetCreatureName` (the player's language). Not `GetCurrentTargets`: it
-  adds rare and generated lists (dangerous mobs). Active steps in order, the
-  current step last, its elements from last to first. A "+" tag's list is nil
+  adds rare and generated lists (dangerous mobs). The sticky steps (before
+  the current step in activeSteps) are the most wanted, the first most (author,
+  1.7.1, as for Zygor), then the current step, then a tip window after it; each
+  step's elements from last to first. A "+" tag's list is nil
   once its parent is complete (UpdateTargets), so what is left is open; a tag
   without "+" stays until its step ends. An unresolved bare ID is a number
   string: QuestieDB's name, or none. One line per name; all `/targetexact`.
@@ -598,7 +604,8 @@ minimap menu, and widgets (contract 2). The Quest Target box is a widget.
   list."
 - Reordering (author): drag a hit list row up or down to change its
   priority, and (1.7.0) a target row within the targets the same way
-  (`DQT.MoveTarget`, saved per quest; see "Names"). The box
+  (`DQT.MoveTarget`, saved per quest; see "Names"). A row under "Not in the
+  macro" is a target row too (1.7.1, author): drag it up into the targets. The box
   shows the most wanted first; `db.added` keeps it last (`DQT.MoveAdded`
   maps the box's place to the saved one). Hit list and target rows take clicks (to
   start the drag) and are not drag handles of the box; a row is dropped only

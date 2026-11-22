@@ -340,6 +340,26 @@ local function SmartOrder(db, list)
     return list
 end
 
+-- A guide step keeps its guide's order, but in smart mode its rare or named mobs
+-- go first (author, 1.7.1). targets: least wanted first, as the macro lists them.
+local function RareFirst(db, targets)
+    if not (db and DQT.db and DQT.db.smartOrder) then
+        return targets
+    end
+    local ordered, rares = {}, {}
+    for _, target in ipairs(targets) do
+        if IsRare(db, target.id) then
+            rares[#rares + 1] = target
+        else
+            ordered[#ordered + 1] = target
+        end
+    end
+    for _, target in ipairs(rares) do
+        ordered[#ordered + 1] = target
+    end
+    return ordered
+end
+
 -- With onlyIndex, that one objective (Questie's objective focus).
 local function ObjectiveTargets(db, questID, onlyIndex)
     local objectives = C_QuestLog.GetQuestObjectives(questID)
@@ -990,7 +1010,8 @@ local function UniqueTargets(names)
 end
 
 -- Zygor's step as a focused "quest": the names of its open goals and of the
--- sticky steps shown with it (less important), all /targetexact. Its title is
+-- sticky steps shown with it (more important, the first sticky most; author,
+-- 1.7.1: "Sticky steps should be higher priority"), all /targetexact. Its title is
 -- the step's first open quest. Nil when the step names no one (a goto or a
 -- text step), so the quest focus counts.
 local function ZygorQuest(db)
@@ -999,10 +1020,11 @@ local function ZygorQuest(db)
         return nil
     end
     local names = {}
-    for _, shown in ipairs(ShownSteps()) do
-        StepNames(db, shown, names)
+    local shown = ShownSteps()
+    for index = #shown, 1, -1 do
+        StepNames(db, shown[index], names)
     end
-    local targets = UniqueTargets(names)
+    local targets = RareFirst(db, UniqueTargets(names))
     if #targets == 0 then
         return nil
     end
@@ -1091,22 +1113,29 @@ local function QuestNpcs(db, questID)
     return known
 end
 
--- RestedXP's steps as a focused "quest": the names on its active steps, the
--- current step's last, its elements from last to first. Nil when no one is named.
+-- RestedXP's steps as a focused "quest": the names on its active steps, each
+-- step's elements from last to first. The sticky steps (before the current one in
+-- activeSteps) win over the current step, the first sticky most (author, 1.7.1);
+-- a tip window (after it) wins over nothing. Nil when no one is named.
 local function RxpQuest(db)
     local steps, current, addon = RxpSteps()
     if not current then
         return nil
     end
     local names = {}
-    -- The current step wins over a sticky step or tip window after it.
-    local ordered = {}
-    for _, step in ipairs(steps) do
-        if step ~= current then
-            ordered[#ordered + 1] = step
+    local place
+    for index, step in ipairs(steps) do
+        if step == current then
+            place = index
         end
     end
-    ordered[#ordered + 1] = current
+    local ordered = {}
+    for index = #steps, place, -1 do
+        ordered[#ordered + 1] = steps[index]
+    end
+    for index = place - 1, 1, -1 do
+        ordered[#ordered + 1] = steps[index]
+    end
     for _, step in ipairs(ordered) do
         for index = #step.elements, 1, -1 do
             local element = step.elements[index]
@@ -1131,6 +1160,7 @@ local function RxpQuest(db)
             target.id = target.id or QuestNpcs(db, quest.id)[target.name:lower()]
         end
     end
+    targets = RareFirst(db, targets)
     -- The title is the current step's first open quest; RxpQuests lists those first.
     local title, logQuest
     for _, quest in ipairs(quests) do
@@ -1223,7 +1253,7 @@ local function QtrQuest(db)
     for _, target in ipairs(targets) do
         passing[#passing + 1] = target
     end
-    targets = passing
+    targets = RareFirst(db, passing)
     local named = db and type(db.quest.name) == "function" and db.quest.name(questID)
     return {
         id = "qtr " .. QtrKey(step),

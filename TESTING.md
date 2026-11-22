@@ -112,7 +112,11 @@ With `/dqt debug` for details:
     and with the setting switched, and a drop outside the box cancels. In
     combat, the box changes at once and chat says the macro updates after
     combat. Abandon or turn in the quest, then drag on another quest: the old
-    order is gone from the saved variables. No Lua errors.
+    order is gone from the saved variables. With a full macro, drag a name
+    from "Not in the macro" to the top of the targets: it goes into the macro.
+    On a RestedXP or Zygor step with a sticky rare (Darkshore, Anaya
+    Dawnrunner, during Bashal'Aran), the rare is first in the box with Smart
+    targeting mode on. No Lua errors.
 35. Profile (Dyre's Toolkit 2.10.0 or newer, two characters): on the first,
     set a mob marker, the box's style and width, and add a hit list name; move
     the box. On the second, with its own hit list and opener: on Dyre's Toolkit's
@@ -306,7 +310,7 @@ With `/dqt debug` for details:
     the macro and the box follow Zygor's step at once (header
     "<quest> (Zygor)", the line under it "Zygor: step N of <guide>"), before
     you complete a step. A step with goals for two quests lists the mobs of
-    both; a sticky step's mobs come first in the macro, the step's own last.
+    both; a sticky step's mobs are the most wanted (last in the macro).
     Focus another quest in Questie's tracker: it wins; kill a mob of
     Zygor's step: Questie's focus stays. Complete a Zygor step: the next
     step wins, chat says "Focused quest changed via Zygor (...)", and the
@@ -326,7 +330,7 @@ With `/dqt debug` for details:
     step" is on, under "Integrations (Experimental)"; with RestedXP disabled and
     `/reload`, it is greyed. Log in on a step with `.mob` tags: the macro and box
     follow it (header "<quest> (RestedXP)", then "RestedXP: step N of <guide>"),
-    with sticky steps' names first in the macro. Finish a `+` objective: its name
+    with sticky steps' names the most wanted (last in the macro). Finish a `+` objective: its name
     leaves, with the chat line. Focus another quest in Questie's tracker: it
     wins, and RestedXP's own game focus does not take it back; the next step wins
     with "Focused quest changed via RestedXP (...)". Focus a quest outside the
