@@ -411,17 +411,17 @@ local LOADING_GRACE = 2
 local focusSource = "questie"
 local loading = true
 local lastGameID
--- A guide's step is a focus too (author-approved, 1.3.0): "zygor" or "rxp" when
--- that guide changed last, nil when a quest focus did. A guide step wins when
--- it names someone. At login either may ("login"), Zygor's first: Zygor
+-- A guide's step is a focus too (author-approved, 1.3.0): "zygor", "rxp", "oxp", or
+-- "qtr" when that guide changed last, nil when a quest focus did. A guide step wins
+-- when it names someone. At login any may ("login"), Zygor's first: Zygor
 -- restores its step but does not set the game's focus then (found in client).
 local guideFocus = "login"
 local lastZygorKey
-local lastRxpKey
+local lastRxpKeys = {}
 local lastQtrKey
 -- The first step of a session is the one the guide restores, perhaps well
 -- after login: TomTom is not pointed at it, so a waypoint of your own stays.
-local restoring = {Zygor = true, RestedXP = true, QuestTrail = true}
+local restoring = {Zygor = true, RestedXP = true, OpenXP = true, QuestTrail = true}
 -- The side you changed last ("questie" or "game"), until SyncFocus copies it
 -- to the other; and the quest both last agreed on.
 local syncFrom
@@ -613,12 +613,22 @@ local function ZygorHasQuest(questID)
     return false
 end
 
--- RestedXP's active steps (GuideWindow.lua: RXPFrame.activeSteps, its sticky
+-- RestedXP's step engine, in RestedXP itself and in OpenXP (author-approved, 1.8.0),
+-- a fork of RestedXP (its NOTICE.md) that keeps the engine and every field DQT reads
+-- under its own AceAddon name. Each is its own guide: its own setting, step, and
+-- "Active guide" choice. In login order.
+local RXP_ENGINES = {
+    rxp = {ace = "RXPGuides", via = "RestedXP", setting = "rxpFocus"},
+    oxp = {ace = "OpenXP", via = "OpenXP", setting = "oxpFocus"},
+}
+local RXP_ORDER = {"rxp", "oxp"}
+
+-- An engine's active steps (GuideWindow.lua: RXPFrame.activeSteps, its sticky
 -- steps first, then the current step, then perhaps a tip window). Found through
--- AceAddon: the global RXP is marked "debug purposes", and the global RXPGuides
--- is another table. RestedXP's private fields, not a public API: each is
+-- AceAddon: RestedXP's global RXP is marked "debug purposes", and the global
+-- RXPGuides is another table. Private fields, not a public API: each is
 -- checked, and without them DQT follows the quest focus.
-local function Rxp()
+local function Rxp(engine)
     local stub = _G.LibStub
     if type(stub) ~= "table" or type(stub.GetLibrary) ~= "function" then
         return nil
@@ -627,7 +637,7 @@ local function Rxp()
     if type(ace) ~= "table" or type(ace.GetAddon) ~= "function" then
         return nil
     end
-    local addon = ace:GetAddon("RXPGuides", true)
+    local addon = ace:GetAddon(RXP_ENGINES[engine].ace, true)
     if type(addon) == "table" then
         return addon
     end
@@ -639,15 +649,20 @@ local function RxpActiveSteps(addon)
     return type(active) == "table" and active or nil
 end
 
-function DQT.RxpAvailable()
-    return RxpActiveSteps(Rxp()) ~= nil
+-- RestedXP ("rxp", the default) or OpenXP ("oxp") is loaded with its step engine.
+function DQT.RxpAvailable(engine)
+    return RxpActiveSteps(Rxp(engine or "rxp")) ~= nil
 end
 
--- The active steps that have elements, in RestedXP's order, and the current
+function DQT.OxpAvailable()
+    return DQT.RxpAvailable("oxp")
+end
+
+-- The active steps that have elements, in the engine's order, and the current
 -- one: the last with a step number. Only steps with a number count as current
 -- (a tip window has none in the guide's list).
-local function RxpSteps()
-    local addon = DQT.db.rxpFocus and Rxp()
+local function RxpSteps(engine)
+    local addon = DQT.db[RXP_ENGINES[engine].setting] and Rxp(engine)
     local steps, current = {}, nil
     for _, step in ipairs(RxpActiveSteps(addon) or {}) do
         if type(step) == "table" and type(step.elements) == "table" then
@@ -668,15 +683,15 @@ local function RxpKey(step, addon)
     return tostring(guide) .. "#" .. tostring(step.index)
 end
 
-local function CurrentRxpKey()
-    local _, current, addon = RxpSteps()
+local function CurrentRxpKey(engine)
+    local _, current, addon = RxpSteps(engine)
     return current and RxpKey(current, addon)
 end
 
 -- The quests of the active steps (accept, turnin, and complete elements have
 -- element.questId), the current step's first. Each once.
-local function RxpQuests()
-    local steps = RxpSteps()
+local function RxpQuests(engine)
+    local steps = RxpSteps(engine)
     local quests, seen = {}, {}
     for index = #steps, 1, -1 do
         for _, element in ipairs(steps[index].elements) do
@@ -737,7 +752,7 @@ local function CurrentQtrKey()
     return step and QtrKey(step)
 end
 
-local GUIDE_NAMES = {zygor = "Zygor", rxp = "RestedXP", qtr = "QuestTrail"}
+local GUIDE_NAMES = {zygor = "Zygor", rxp = "RestedXP", oxp = "OpenXP", qtr = "QuestTrail"}
 
 -- A choice of "Active guide" is offered while its AddOn is installed and followed.
 function DQT.ActiveGuideOn(key)
@@ -748,8 +763,8 @@ function DQT.ActiveGuideOn(key)
         return DQT.QuestieFocusAvailable() and (db.questieFocus or not DQT.HasGameFocus())
     elseif key == "zygor" then
         return DQT.ZygorAvailable() and db.zygorFocus
-    elseif key == "rxp" then
-        return DQT.RxpAvailable() and db.rxpFocus
+    elseif RXP_ENGINES[key] then
+        return DQT.RxpAvailable(key) and db[RXP_ENGINES[key].setting]
     elseif key == "qtr" then
         return DQT.QuestTrailAvailable() and db.qtrFocus
     end
@@ -766,7 +781,7 @@ function DQT.ActiveGuide()
     return "recent"
 end
 
--- The chosen guide (Zygor, RestedXP, or QuestTrail), or nil.
+-- The chosen guide (Zygor, RestedXP, OpenXP, or QuestTrail), or nil.
 local function ChosenGuide()
     local key = DQT.ActiveGuide()
     return GUIDE_NAMES[key] and key or nil
@@ -798,9 +813,11 @@ local function GuideHasQuest(questID)
     if ZygorHasQuest(questID) then
         return true
     end
-    for _, quest in ipairs(RxpQuests()) do
-        if quest.id == questID then
-            return true
+    for _, engine in ipairs(RXP_ORDER) do
+        for _, quest in ipairs(RxpQuests(engine)) do
+            if quest.id == questID then
+                return true
+            end
         end
     end
     -- QuestTrail sets the game's focus to its step's quest (ns.Focus.Set).
@@ -858,18 +875,21 @@ function DQT.HookZygor(onChange)
     return true
 end
 
--- A new current RestedXP step (not while the world loads) makes it the latest
--- focus. Read at each rebuild, so it does not matter which signal asked for it.
-local function NoteRxpStep()
-    local key = CurrentRxpKey()
-    if key and key ~= lastRxpKey then
-        if not loading and GuideAllowed("rxp") then
-            guideFocus = "rxp"
+-- A new current RestedXP or OpenXP step (not while the world loads) makes it the
+-- latest focus: the newest step of any guide wins (author, 1.8.0), unless another
+-- guide is chosen as the active guide. Read at each rebuild, so it does not matter
+-- which signal asked for it.
+local function NoteRxpStep(engine)
+    local key = CurrentRxpKey(engine)
+    local last = lastRxpKeys[engine]
+    if key and key ~= last then
+        if not loading and GuideAllowed(engine) then
+            guideFocus = engine
         end
-        if lastRxpKey then
-            restoring.RestedXP = false
+        if last then
+            restoring[RXP_ENGINES[engine].via] = false
         end
-        lastRxpKey = key
+        lastRxpKeys[engine] = key
     end
 end
 
@@ -907,12 +927,12 @@ function DQT.HookQuestTrail(onChange)
     return hooked
 end
 
--- RestedXP runs UpdateUnitList when its target list changes (Targeting.lua).
--- Only asks for a rebuild. Its RXP_STEP_ messages would need AceEvent, which DQT
--- does not embed; this hook and the quest events are enough. Returns true when
--- hooked.
-function DQT.HookRxp(onChange)
-    local addon = Rxp()
+-- RestedXP and OpenXP run UpdateUnitList when their target list changes
+-- (Targeting.lua). Only asks for a rebuild. Their RXP_STEP_ messages would need
+-- AceEvent, which DQT does not embed; this hook and the quest events are enough.
+-- Returns true when either is hooked.
+local function HookEngine(engine, onChange)
+    local addon = Rxp(engine)
     local targeting = addon and addon.targeting
     if type(hooksecurefunc) ~= "function" or type(targeting) ~= "table"
             or type(targeting.UpdateUnitList) ~= "function" then
@@ -932,6 +952,14 @@ function DQT.HookRxp(onChange)
     return true
 end
 
+function DQT.HookRxp(onChange)
+    local hooked = false
+    for _, engine in ipairs(RXP_ORDER) do
+        hooked = HookEngine(engine, onChange) or hooked
+    end
+    return hooked
+end
+
 function DQT.WorldLoading()
     loading = true
 end
@@ -941,7 +969,9 @@ function DQT.WorldEntered()
         loading = false
         lastGameID = GameFocus()
         lastZygorKey = CurrentZygorKey() or lastZygorKey
-        lastRxpKey = CurrentRxpKey() or lastRxpKey
+        for _, engine in ipairs(RXP_ORDER) do
+            lastRxpKeys[engine] = CurrentRxpKey(engine) or lastRxpKeys[engine]
+        end
         lastQtrKey = CurrentQtrKey() or lastQtrKey
     end)
 end
@@ -1117,8 +1147,8 @@ end
 -- step's elements from last to first. The sticky steps (before the current one in
 -- activeSteps) win over the current step, the first sticky most (author, 1.7.1);
 -- a tip window (after it) wins over nothing. Nil when no one is named.
-local function RxpQuest(db)
-    local steps, current, addon = RxpSteps()
+local function RxpQuest(db, engine)
+    local steps, current, addon = RxpSteps(engine)
     if not current then
         return nil
     end
@@ -1154,7 +1184,7 @@ local function RxpQuest(db)
     if #targets == 0 then
         return nil
     end
-    local quests = RxpQuests()
+    local quests = RxpQuests(engine)
     for _, target in ipairs(db and targets or {}) do
         for _, quest in ipairs(target.id and {} or quests) do
             target.id = target.id or QuestNpcs(db, quest.id)[target.name:lower()]
@@ -1174,8 +1204,8 @@ local function RxpQuest(db)
         or type(guide.name) == "string" and guide.name or nil
     local stepText = "step " .. current.index .. (guideName and (" of " .. guideName) or "")
     return {
-        id = "rxp " .. RxpKey(current, addon),
-        via = "RestedXP",
+        id = engine .. " " .. RxpKey(current, addon),
+        via = RXP_ENGINES[engine].via,
         title = title or ("Guide " .. stepText),
         logQuest = logQuest,
         stepText = stepText,
@@ -1308,7 +1338,9 @@ end
 -- The focused quest and its targets, ordered least to most important, or nil.
 local function BuildFocusedQuest()
     local db = Database()
-    NoteRxpStep()
+    for _, engine in ipairs(RXP_ORDER) do
+        NoteRxpStep(engine)
+    end
     NoteQtrStep()
     DecidePendingFocus()
     if GuideCounts("zygor") then
@@ -1317,8 +1349,8 @@ local function BuildFocusedQuest()
             return zygor
         end
     end
-    if GuideCounts("rxp") then
-        local rxp = RxpQuest(db)
+    for _, engine in ipairs(RXP_ORDER) do
+        local rxp = GuideCounts(engine) and RxpQuest(db, engine)
         if rxp then
             return rxp
         end
@@ -1433,8 +1465,8 @@ end
 local function GuideKey(guide)
     if guide == "zygor" then
         return CurrentZygorKey()
-    elseif guide == "rxp" then
-        return CurrentRxpKey()
+    elseif RXP_ENGINES[guide] then
+        return CurrentRxpKey(guide)
     elseif guide == "qtr" then
         return CurrentQtrKey()
     end
@@ -1482,7 +1514,7 @@ end
 function DQT.Resync()
     local guide = ChosenGuide()
     if not guide then
-        DQT.Report("Re-sync needs an active guide: choose Zygor, RestedXP, or QuestTrail under \"Active guide\" "
+        DQT.Report("Re-sync needs an active guide: choose Zygor, RestedXP, OpenXP, or QuestTrail under \"Active guide\" "
             .. "in the settings (/dqt).")
         return
     end
@@ -1591,7 +1623,7 @@ local function ZygorLocation()
     end
 end
 
--- RestedXP: as updateArrowData (map.lua), the first element of
+-- RestedXP and OpenXP: as updateArrowData (map.lua), the first element of
 -- addon.activeWaypoints that the arrow may take, a low-priority one only when
 -- no other is left. activeWaypoints lists the active steps in RestedXP's order,
 -- so a sticky step's location comes first, as on its arrow. An element's x and
@@ -1613,8 +1645,8 @@ local function RxpWaypointUsable(element)
     return element.arrow and not (element.text and element.completed) and true or false
 end
 
-local function RxpLocation()
-    local _, current, addon = RxpSteps()
+local function RxpLocation(engine)
+    local _, current, addon = RxpSteps(engine)
     local waypoints = addon and addon.activeWaypoints
     if not current or type(waypoints) ~= "table" then
         return nil
@@ -1631,9 +1663,9 @@ local function RxpLocation()
     end
     if chosen then
         return {
-            via = "RestedXP",
+            via = RXP_ENGINES[engine].via,
             step = RxpKey(current, addon),
-            title = "RestedXP: step " .. tostring(current.index),
+            title = RXP_ENGINES[engine].via .. ": step " .. tostring(current.index),
             map = chosen.zone,
             x = chosen.x / 100,
             y = chosen.y / 100,
@@ -1671,8 +1703,10 @@ local function GuideLocation()
     if GuideCounts("zygor") then
         location = ZygorLocation()
     end
-    if not location and GuideCounts("rxp") then
-        location = RxpLocation()
+    for _, engine in ipairs(RXP_ORDER) do
+        if not location and GuideCounts(engine) then
+            location = RxpLocation(engine)
+        end
     end
     if not location and GuideCounts("qtr") then
         location = QtrLocation()
@@ -1680,9 +1714,19 @@ local function GuideLocation()
     return location
 end
 
--- RestedXP's list is empty until its first UpdateMap(true), after login.
-local function RxpMapPending()
-    local addon = Rxp()
+-- RestedXP's (or OpenXP's) list is empty until its first UpdateMap(true), after
+-- login. via: the engine's name.
+local function RxpMapPending(via)
+    local engine
+    for key, entry in pairs(RXP_ENGINES) do
+        if entry.via == via then
+            engine = key
+        end
+    end
+    if not engine then
+        return false
+    end
+    local addon = Rxp(engine)
     local waypoints = addon and addon.activeWaypoints
     return type(waypoints) == "table" and #waypoints == 0
 end
@@ -1845,9 +1889,9 @@ function DQT.PointTomTom(quest, kept, force)
     local first = lastWaypointKey == nil
     if restoring[via] ~= nil then
         first = restoring[via]
-        -- Not yet while RestedXP's list is empty: its location appears a moment
-        -- after login, and that is not a change.
-        if via ~= "RestedXP" or not RxpMapPending() then
+        -- Not yet while RestedXP's (or OpenXP's) list is empty: its location
+        -- appears a moment after login, and that is not a change.
+        if not RxpMapPending(via) then
             restoring[via] = false
         end
     end
@@ -1895,9 +1939,13 @@ function DQT.ReportQuestDebug()
     local step, zgv = ZygorStep()
     DQT.Report("debug Zygor: " .. (not Zygor() and "not loaded" or not DQT.db.zygorFocus and "not followed"
         or not step and "no step" or ("step " .. ZygorKey(step, zgv))) .. " guide latest=" .. tostring(guideFocus))
-    local rxpSteps, rxpCurrent, rxp = RxpSteps()
-    DQT.Report("debug RestedXP: " .. (not Rxp() and "not loaded" or not DQT.db.rxpFocus and "not followed"
-        or not rxpCurrent and "no step" or ("step " .. RxpKey(rxpCurrent, rxp) .. ", " .. #rxpSteps .. " active")))
+    for _, engine in ipairs(RXP_ORDER) do
+        local entry = RXP_ENGINES[engine]
+        local rxpSteps, rxpCurrent, rxp = RxpSteps(engine)
+        DQT.Report("debug " .. entry.via .. ": " .. (not Rxp(engine) and "not loaded"
+            or not DQT.db[entry.setting] and "not followed" or not rxpCurrent and "no step"
+            or ("step " .. RxpKey(rxpCurrent, rxp) .. ", " .. #rxpSteps .. " active")))
+    end
     local qtrStep = QtrStep()
     DQT.Report("debug QuestTrail: " .. (not QuestTrail() and "not loaded" or not DQT.db.qtrFocus and "not followed"
         or not qtrStep and "no quest step" or ("step " .. QtrKey(qtrStep))))

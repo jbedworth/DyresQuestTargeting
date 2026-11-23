@@ -106,7 +106,18 @@ function DQT.ResetBox()
     end)
 end
 
+-- Dyre's Toolkit 2.14.0's "Welcome messages at login" switch; an older
+-- toolkit, or none, shows them. Errors and problems always show.
+local function WelcomeOff()
+    local toolkit = _G.DyresToolkit
+    return type(toolkit) == "table" and type(toolkit.ShowWelcome) == "function"
+        and toolkit.ShowWelcome() == false
+end
+
 local function ReportLoaded(available)
+    if WelcomeOff() then
+        return
+    end
     local banner = Metadata("Title") or DEFAULT_TITLE
     local version, author = Metadata("Version"), Metadata("Author")
     if version then
@@ -125,6 +136,7 @@ end
 -- files otherwise fails silently, because the client hides Lua errors by default.
 local REQUIRED_NAMESPACE = {"ParseCommand", "HandleCommand", "FocusedQuest", "GameFocusChanged", "WorldLoading",
     "WorldEntered", "HookQuestieFocus", "QuestieFocusAvailable", "HookZygor", "ZygorAvailable", "HookRxp", "RxpAvailable",
+    "OxpAvailable",
     "HookQuestTrail", "QuestTrailAvailable", "QuestAccepted", "ActiveGuide", "SelectGuide", "Resync", "ResyncAvailable",
     "SyncFocus", "TargetOrderKey",
     "PointTomTom",
@@ -167,16 +179,16 @@ end
 -- Something to follow: the game's focus, Questie's tracker focus, or a guide.
 function DQT.CanFollowQuests()
     return DQT.HasGameFocus() or DQT.QuestieFocusAvailable() or DQT.ZygorAvailable() or DQT.RxpAvailable()
-        or DQT.QuestTrailAvailable()
+        or DQT.OxpAvailable() or DQT.QuestTrailAvailable()
 end
 
 -- "Active guide" (db.activeGuide, author-approved, 2026-11-14): which focus drives
 -- DQT. "recent", the most recent focus change (the default, and the only behavior before), or one
 -- AddOn: its focus or step drives DQT, and a guide's new step also focuses its quest
 -- in Questie's tracker. The settings list only those installed and on.
-DQT.ACTIVE_GUIDE_ORDER = {"recent", "questie", "rxp", "zygor", "qtr"}
-DQT.ACTIVE_GUIDE_LABELS = {recent = "Most Recent Focus", questie = "Questie", rxp = "RestedXP", zygor = "Zygor",
-    qtr = "QuestTrail"}
+DQT.ACTIVE_GUIDE_ORDER = {"recent", "questie", "rxp", "oxp", "zygor", "qtr"}
+DQT.ACTIVE_GUIDE_LABELS = {recent = "Most Recent Focus", questie = "Questie", rxp = "RestedXP", oxp = "OpenXP",
+    zygor = "Zygor", qtr = "QuestTrail"}
 
 -- How a focus is named in chat and the box: its own name, else the game's focus.
 function DQT.ViaName(quest, gameName)
@@ -338,6 +350,9 @@ function DQT.SanitizeDB(db)
     end
     if type(db.rxpFocus) ~= "boolean" then
         db.rxpFocus = true
+    end
+    if type(db.oxpFocus) ~= "boolean" then
+        db.oxpFocus = true
     end
     if type(db.qtrFocus) ~= "boolean" then
         db.qtrFocus = true

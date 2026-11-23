@@ -281,7 +281,7 @@ local function fixture(options)
     end
     -- LibStub's libraries, as the AddOns below register them.
     state.libraries = {}
-    if options.rxp or options.questtrail then
+    if options.rxp or options.oxp or options.questtrail then
         env.LibStub = {GetLibrary = function(_, name, silent)
             equal(silent, true, "asks silently")
             return state.libraries[name]
@@ -316,35 +316,44 @@ local function fixture(options)
     -- them (a paid AddOn: none of its code is here). options.zygor.step and
     -- .stickies are the shown steps; options.zygor.noMessages leaves out
     -- AddMessageHandler.
-    -- RestedXP: only the fields DQT reads, as its source names them, through
-    -- AceAddon. options.rxp.steps are the active steps in RestedXP's order.
-    if options.rxp then
-        local addon = {RXPFrame = not options.rxp.noFrame and {activeSteps = options.rxp.steps or {}} or nil,
-            currentGuide = {name = "1-10 Teldrassil"}, targeting = {}, activeWaypoints = options.rxp.waypoints}
-        state.mapUpdates = 0
+    -- RestedXP, and OpenXP (its fork, the same engine under another AceAddon
+    -- name): only the fields DQT reads, as their source names them, through
+    -- AceAddon. options.rxp.steps (options.oxp.steps) are the active steps in
+    -- the engine's order.
+    local engines = {}
+    local function Engine(opts, aceName, guideName)
+        local addon = {RXPFrame = not opts.noFrame and {activeSteps = opts.steps or {}} or nil,
+            currentGuide = {name = guideName}, targeting = {}, activeWaypoints = opts.waypoints}
+        state.mapUpdates = state.mapUpdates or 0
         function addon.UpdateMap(resetPins)
             if resetPins then state.mapUpdates = state.mapUpdates + 1 end
         end
+        state.unitListUpdates = state.unitListUpdates or 0
+        function addon.targeting:UpdateUnitList() state.unitListUpdates = state.unitListUpdates + 1 end
+        engines[aceName] = addon
+        state.libraries["AceAddon-3.0"] = {GetAddon = function(_, name, silent)
+            equal(silent, true, "asks silently")
+            return engines[name]
+        end}
         -- As UpdateMap(true): a new arrow list. UpdateMap() only sets a flag.
-        function state.rxpMap(waypoints)
+        local function Map(waypoints)
             addon.activeWaypoints = waypoints
             addon.UpdateMap(true)
         end
-        state.unitListUpdates = 0
-        function addon.targeting:UpdateUnitList() state.unitListUpdates = state.unitListUpdates + 1 end
-        local ace = {GetAddon = function(_, name, silent)
-            equal(silent, true, "asks silently")
-            if name == "RXPGuides" then return addon end
-        end}
-        state.libraries["AceAddon-3.0"] = ace
-        -- As SetStep: the new active steps; RestedXP then updates its list.
-        function state.rxpSteps(steps)
+        -- As SetStep: the new active steps; the engine then updates its list.
+        local function Steps(steps)
             local active = addon.RXPFrame.activeSteps
             for index = #active, 1, -1 do active[index] = nil end
             for index, step in ipairs(steps) do active[index] = step end
             addon.targeting:UpdateUnitList()
         end
-        state.rxp = addon
+        return addon, Steps, Map
+    end
+    if options.rxp then
+        state.rxp, state.rxpSteps, state.rxpMap = Engine(options.rxp, "RXPGuides", "1-10 Teldrassil")
+    end
+    if options.oxp then
+        state.oxp, state.oxpSteps, state.oxpMap = Engine(options.oxp, "OpenXP", "21-30 Ashenvale")
     end
     if options.zygor then
         local zgv = {CurrentGuide = {title = "Leveling Guides\\Elwynn Forest (1-13)",
@@ -661,6 +670,13 @@ local function fixture(options)
                 if n == 1 then return env.DyresToolkit end
             end
         end
+        -- options.showWelcome: "absent" (a toolkit older than 2.14.0), or
+        -- what ShowWelcome returns.
+        if options.showWelcome == "absent" then
+            env.DyresToolkit.ShowWelcome = nil
+        elseif options.showWelcome ~= nil then
+            env.DyresToolkit.ShowWelcome = function() return options.showWelcome end
+        end
     end
     local namespace = {}
     for _, file in ipairs(RUNTIME_FILES) do
@@ -725,11 +741,32 @@ local CONDOR_QUEST = {[101] = {title = "The Condor Hunt", objectives = {
 
 test("logs in with a banner and makes the character macro", function()
     local state = fixture()
-    contains(state.messages[1], "DQT: Dyre's Quest Targeting 1.7.1 by Dyre")
+    contains(state.messages[1], "DQT: Dyre's Quest Targeting 1.8.0 by Dyre")
     equal(state.said("Ready."), true)
     equal(state.dqt.available, true)
     contains(state.macro(), "nothing to target")
     equal(state.said("Made the character macro"), true)
+end)
+
+test("welcome: the banner follows Dyre's Toolkit's switch; problems always show", function()
+    for _, options in ipairs({{noToolkit = true}, {showWelcome = "absent"}, {showWelcome = true}}) do
+        local state = fixture(options)
+        equal(state.said("Dyre's Quest Targeting 1.8.0 by Dyre"), true)
+        equal(state.said("Ready."), true)
+    end
+    local state = fixture({showWelcome = false})
+    equal(state.said("Dyre's Quest Targeting 1.8.0"), false)
+    equal(state.said("Ready."), false)
+    equal(state.dqt.available, true)
+    equal(state.said("Made the character macro"), true)
+    -- The real switch, when the toolkit in use has it (2.14.0 or later).
+    state = fixture({toolkitDB = {welcome = false}})
+    if state.toolkit.ShowWelcome then
+        equal(state.said("Dyre's Quest Targeting 1.8.0"), false)
+    end
+    state = fixture({oldToolkit = true, showWelcome = false})
+    equal(state.said("Dyre's Quest Targeting 1.8.0"), false)
+    equal(state.said("install or update it from CurseForge"), true)
 end)
 
 test("kill objectives become /targetexact lines, the first objective last", function()
@@ -972,7 +1009,8 @@ test("every integration setting sits under the experimental Integrations heading
     for index, object in ipairs(list) do
         if object.header == "Integrations (Experimental)" then heading = index end
     end
-    local INTEGRATIONS = {"DQT_QUESTIE_FOCUS", "DQT_ZYGOR_FOCUS", "DQT_RXP_FOCUS", "DQT_QTR_FOCUS", "DQT_ACTIVE_GUIDE",
+    local INTEGRATIONS = {"DQT_QUESTIE_FOCUS", "DQT_ZYGOR_FOCUS", "DQT_RXP_FOCUS", "DQT_OXP_FOCUS", "DQT_QTR_FOCUS",
+        "DQT_ACTIVE_GUIDE",
         "DQT_SYNC_FOCUS", "DQT_TOMTOM"}
     for offset, variable in ipairs(INTEGRATIONS) do
         equal(list[heading + offset].setting.variable, variable)
@@ -980,7 +1018,7 @@ test("every integration setting sits under the experimental Integrations heading
     for index = 1, heading - 1 do
         local variable = list[index].setting and list[index].setting.variable
         equal(variable == "DQT_QUESTIE_FOCUS" or variable == "DQT_ZYGOR_FOCUS" or variable == "DQT_RXP_FOCUS"
-            or variable == "DQT_QTR_FOCUS", false,
+            or variable == "DQT_OXP_FOCUS" or variable == "DQT_QTR_FOCUS", false,
             "the main section keeps only the macro's own settings")
     end
     for offset = 1, #INTEGRATIONS do
@@ -1012,7 +1050,7 @@ test("Questie and TomTom settings are greyed out without their AddOns; saved val
     end
     contains(settingRow(none, "DQT_QUESTIE_FOCUS").tooltip, "Needs Questie: greyed out until it is installed")
     contains(settingRow(none, "DQT_SYNC_FOCUS").tooltip, "Needs Questie:")
-    contains(settingRow(none, "DQT_TOMTOM").tooltip, "Needs TomTom, with Questie, Zygor, RestedXP, or QuestTrail:")
+    contains(settingRow(none, "DQT_TOMTOM").tooltip, "Needs TomTom, with Questie, Zygor, RestedXP, OpenXP, or QuestTrail:")
     equal(settingRow(none, "DQT_MARK"):Enabled(), true, "other settings stay on")
     local db = none.env.DyresQuestTargetingDB
     equal(db.syncFocus and db.tomtom and db.questieFocus, true, "the saved values stay as they were")
@@ -3297,6 +3335,37 @@ test("rxp: with Zygor too, Zygor's step wins at login, then the latest new step"
     contains(only.macro(), "/targetexact RestedXP Mob", "Zygor names no one: RestedXP's")
 end)
 
+test("oxp: OpenXP's step drives the macro as RestedXP's, with its own setting and name", function()
+    local state = fixture({quests = THREE_QUESTS, focus = 1, db = RXP_DB, oxp = {steps = {rxpStepThree()}}})
+    equal(state.env.DyresQuestTargetingDB.oxpFocus, true, "on by default")
+    equal(state.dqt.OxpAvailable(), true)
+    equal(state.dqt.RxpAvailable(), false, "RestedXP itself is not loaded")
+    contains(state.macro(), "/targetexact Gnoll Runt", "its step at login")
+    equal(boxLines(state)[1], "Wolves (OpenXP)")
+    equal(boxLines(state)[2], "OpenXP: step 3 of 21-30 Ashenvale")
+    equal(settingRow(state, "DQT_RXP_FOCUS"):Enabled(), false, "the RestedXP switch stays greyed")
+    equal(settingRow(state, "DQT_OXP_FOCUS"):Enabled(), true)
+    state.clear()
+    state.oxpSteps({rstep(4, {{questId = 2}, {mobs = {"Murloc Forager"}}})})
+    state.advance()
+    contains(state.macro(), "/targetexact Murloc Forager", "a new step wins, through the hook")
+    equal(state.said("Focused quest changed via OpenXP (Wolves), targeting updated to Murloc Forager."), true)
+    state.env.C_SuperTrack.SetSuperTrackedQuestID(2)
+    state.advance()
+    contains(state.macro(), "/targetexact Murloc Forager", "its own game focus on the step's quest changes nothing")
+    state.settings.DQT_OXP_FOCUS:SetValue(false)
+    contains(state.macro(), "/targetexact Wolf", "off: ignored, the game's focus (Wolves) counts")
+    lacks(state.macro(), "Murloc")
+    state.slash("debug")
+    equal(state.said("debug OpenXP: not followed"), true)
+    local none = fixture({quests = TWO_QUESTS, focus = 1, saved = {oxpFocus = true}})
+    equal(settingRow(none, "DQT_OXP_FOCUS"):Enabled(), false, "greyed out without OpenXP")
+    contains(settingRow(none, "DQT_OXP_FOCUS").tooltip, "Needs OpenXP: greyed out")
+    equal(none.env.DyresQuestTargetingDB.oxpFocus, true, "the saved value stays")
+    local repaired = fixture({saved = {oxpFocus = "yes"}})
+    equal(repaired.env.DyresQuestTargetingDB.oxpFocus, true, "repaired on load")
+end)
+
 test("rxp: classic without Questie follows RestedXP's step, with no line about a missing focus", function()
     local state = fixture({quests = TWO_QUESTS, classic = true, rxp = {steps = {rxpStepThree()}}})
     equal(state.dqt.available, true)
@@ -3810,6 +3879,45 @@ test("active guide: the box's re-sync button shows only with a guide chosen; the
     equal(state.dqt.ActiveGuide(), "recent", "and counts as Most Recent Focus")
     state.slash("resync")
     contains(state.last(), "Re-sync needs an active guide")
+end)
+
+test("oxp: with RestedXP too, the newest step wins, unless one is the active guide", function()
+    local function both(saved)
+        return fixture({quests = THREE_QUESTS, questie = {focus = 1}, db = RXP_DB, saved = saved,
+            rxp = {steps = {rstep(3, {{mobs = {"RestedXP Mob"}}})}},
+            oxp = {steps = {rstep(3, {{mobs = {"OpenXP Mob"}}})}}})
+    end
+    local state = both()
+    contains(state.macro(), "/targetexact RestedXP Mob", "at login, RestedXP's first")
+    equal(state.dqt.HookRxp(function() end), true)
+    state.oxpSteps({rstep(4, {{mobs = {"New OpenXP Mob"}}})})
+    state.advance()
+    contains(state.macro(), "/targetexact New OpenXP Mob", "OpenXP's new step wins")
+    lacks(state.macro(), "RestedXP Mob")
+    state.rxpSteps({rstep(4, {{mobs = {"New RestedXP Mob"}}})})
+    state.advance()
+    contains(state.macro(), "/targetexact New RestedXP Mob", "then RestedXP's newer one")
+    equal(guideChoices(state), "Most Recent Focus, Questie, RestedXP, OpenXP")
+    state.settings.DQT_ACTIVE_GUIDE:SetValue("oxp")
+    contains(state.macro(), "/targetexact New OpenXP Mob", "choosing OpenXP puts it in charge")
+    state.rxpSteps({rstep(5, {{mobs = {"Ignored RestedXP Mob"}}})})
+    state.advance()
+    lacks(state.macro(), "Ignored RestedXP Mob", "RestedXP's new step is ignored")
+    contains(state.macro(), "/targetexact New OpenXP Mob")
+    local chosen = both({activeGuide = "oxp"})
+    contains(chosen.macro(), "/targetexact OpenXP Mob", "OpenXP chosen: its step at login")
+    lacks(chosen.macro(), "RestedXP Mob")
+end)
+
+test("oxp location: TomTom follows OpenXP's arrow list as RestedXP's", function()
+    local step = rstep(3, {{mobs = {"Gnoll Runt"}}})
+    local state = rxpLocationState({questie = {npcs = RXP_SPAWNS}, oxp = {steps = {step}, waypoints = {rway(step, 10, 20)}}})
+    equal(#state.tomtomPoints, 0, "the step OpenXP restores at login does not point")
+    local nextStep = rstep(4, {{mobs = {"Gnoll Runt"}}})
+    state.oxpSteps({nextStep})
+    state.oxpMap({rway(nextStep, 30, 40)})
+    state.advance()
+    equal(state.tomtomPoints[#state.tomtomPoints].text, "1438 0.3,0.4")
 end)
 
 test("active guide: Questie chosen ignores guide steps; RestedXP chosen ignores Zygor's", function()

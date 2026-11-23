@@ -6,7 +6,7 @@ Dyre's Quest Targeting (DQT, `/dqt`) is a World of Warcraft: Forever AddOn
 that keeps one targeting macro up to date with the quest you are working on.
 It began as the one RestedXP (RXP) feature the author still wanted, built from
 Forever's own quest journal instead of a guide; since 1.3.0 it can also follow
-a Zygor or RestedXP step, and since 1.4.1 a QuestTrail step. Keep this feature set; do not add speculative features
+a Zygor or RestedXP step, since 1.4.1 a QuestTrail step, and since 1.8.0 an OpenXP step. Keep this feature set; do not add speculative features
 or frameworks without agreement.
 
 Naming (author-approved): the title starts with "Dyre's", so players can find
@@ -352,6 +352,33 @@ not a public API. Tests mock only its fields, with no guide text.
   same (source only; RestedXP is not installed in `_classic_era_`). A guide
   counts for `DQT.CanFollowQuests`, so RestedXP without Questie follows its step.
 
+### With OpenXP (built 1.8.0; author-approved, 2026-11-23)
+
+Author: a friend uses OpenXP, "another off-brand leveling guide that's free", and
+"newest step wins unless the user has selected RXP, Zygor, OpenXP, etc. as their
+primary guide". Source verified in OpenXP 1.3.66 (`_forever_\Interface\AddOns\OpenXP`,
+CC BY-NC-SA 4.0; DQT copies none of it and only reads its fields): a fork of
+RestedXP (NOTICE.md: upstream commit `b9f2e25`, 2026-11-07) whose new guide card
+keeps RestedXP's window running hidden as the step engine. Tests mock only its fields.
+
+- The same engine as RestedXP under another AceAddon name, "OpenXP" (Locale.lua:5).
+  Quest.lua's `RXP_ENGINES` holds both (`rxp`: "RXPGuides", `oxp`: "OpenXP"), each with
+  its own name ("RestedXP", "OpenXP") and setting; every RestedXP rule above applies to
+  each. Unchanged fields, checked: `RXPFrame.activeSteps` (GuideWindow.lua:672-673),
+  `targeting:UpdateUnitList` (the same function), `UpdateMap(resetPins)` (map.lua:1204),
+  `GetCreatureName` (locale/NPCnames.lua:4), `currentGuide`, `activeWaypoints` and
+  `updateArrowData` (only its saved variable is renamed, `OXPCData`).
+- "Follow OpenXP's current step" (`db.oxpFocus`, default on, greyed out without it,
+  by `DQT.OxpAvailable`), after the RestedXP switch. "Active guide" lists "OpenXP"
+  (`oxp`). `guideFocus` "oxp"; at login after RestedXP. With both loaded, each is its
+  own guide: the newest step wins unless one is the active guide.
+- OpenXP's guides: its 1-20 Forever guides are RestedXP's; its own 21-60 guides use
+  `.mob`, `.target`, `.goto`, and `.complete` (no `.unitscan` or `#sticky`). It sets the
+  game's focus as RestedXP does (functions.lua:1596, 1939; GuideWindow.lua:795), so a
+  game focus on a quest of its active steps changes nothing.
+- Its "Quest Targets" key bindings (secure buttons `OpenXPTargetMobs`,
+  `OpenXPTargetNPCs`) are left alone, as RestedXP's macro is.
+
 ### With QuestTrail (built 1.4.1; author-approved, 2026-11-10)
 
 A player asked: DQT "picks up the focus quest targets but not the targets for the
@@ -454,7 +481,8 @@ safety check and changes no name.
 That heading holds every setting for another AddOn (author, 1.3.0, renamed
 from "Questie Synchronization": "I had a hard time finding the setting"),
 in this order: "Follow Questie's tracker focus", "Follow Zygor's current
-step", "Follow RestedXP's current step", "Follow QuestTrail's current step", "Active
+step", "Follow RestedXP's current step", "Follow OpenXP's current step", "Follow
+QuestTrail's current step", "Active
 guide", "Keep Questie's and the game's focus in sync", and "Point TomTom at the focused
 quest". Above it, the macro's own settings: the switch, the
 markers, the opener, the account-wide macro, and "Smart targeting mode". Only the place changed:

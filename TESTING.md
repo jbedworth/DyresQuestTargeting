@@ -103,6 +103,16 @@ With `/dqt debug` for details:
    Forever's mobs.
 7. `/dqt add Goretusk` finds Great Goretusk; `/dqt add_exact` does not.
    `/dqt add` with a dead mob targeted adds its name.
+37. With OpenXP (and Questie, QuestieDB, TomTom): "Follow OpenXP's current step"
+    is on, after the RestedXP switch; with OpenXP disabled and `/reload`, it is
+    greyed. On a step with `.mob` or `.target` tags, the macro and box follow it
+    (header "<quest> (OpenXP)", then "OpenXP: step N of <guide>"); the next step
+    says "Focused quest changed via OpenXP (...)". OpenXP's own game focus does not
+    take the macro from Questie's focus. With TomTom pointing on, the next step
+    moves the arrow to where OpenXP's arrow points. "Active guide" lists OpenXP. With
+    RestedXP enabled too: the newer step of either wins; choose one under "Active
+    guide" and the other's new steps are ignored. `/dqt debug` has an "OpenXP:" line.
+    No Lua errors.
 36. Target order (QuestieDB, Questie): focus a quest with a rare or one-spawn
     named mob and an item objective, such as The Cursed Crew (First Mate
     Snellig's Snuffbox). With "Smart targeting mode" on, the box lists the named

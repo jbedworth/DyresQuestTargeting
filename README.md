@@ -9,7 +9,7 @@ your focused quest needs. Put it on an action bar and press it to find, target, 
 nearest one. Type `/dqt` for the settings (see [Settings](#settings)).
 Everything is saved per character. Works best with **Questie** and **TomTom**;
 both are optional. It can also follow the current step of **Zygor Guides
-Viewer** or **RestedXP**.
+Viewer**, **RestedXP**, **OpenXP**, or **QuestTrail**.
 
 It began as the one part of RestedXP's guides the author still wanted, built
 from Forever's own quest journal instead of a guide.
@@ -35,6 +35,8 @@ from Forever's own quest journal instead of a guide.
   [With Zygor](#with-zygor).
 - **RestedXP's guide step** (with RestedXP, experimental): the same, for the
   names on its current and sticky steps. See [With RestedXP](#with-restedxp).
+- **OpenXP's guide step** (with OpenXP, experimental): the same as RestedXP's.
+  See [With OpenXP](#with-openxp).
 - **Kill objectives** it still needs. With **Smart targeting mode** (on by
   default) and QuestieDB, rare and named mobs come first, then the mobs that
   drop the quest's items (highest drop rate first), then the mobs to kill.
@@ -119,8 +121,8 @@ no name typed, also in combat (the macro then updates after combat).
 
 A rounded box with a thin gold edge (on by default) shows what the macro
 does. Its header names your
-focused quest and how it is focused, "(Questie)", "(Zygor)", "(RestedXP)", or
-"(Focus)"; under it is the objective you focused in Questie, or the guide's step. Then the names the macro looks for,
+focused quest and how it is focused, "(Questie)", "(Zygor)", "(RestedXP)",
+"(OpenXP)", "(QuestTrail)", or "(Focus)"; under it is the objective you focused in Questie, or the guide's step. Then the names the macro looks for,
 most wanted first, with each quest item and, in its own column, the drop
 rate ("-" when Questie has no rate), the names left out of the macro's 255
 letters, and your hit list. Hover over a cut-off row ("...") to read all of
@@ -160,8 +162,8 @@ off.
 
 `/dqt` opens the settings: Options > AddOns > Dyre's AddOns > Quest
 Targeting, beside your other Dyre's AddOns; the toolkit's minimap menu opens
-them too. The settings for other AddOns (Questie, Zygor, RestedXP, QuestTrail,
-TomTom) are together
+them too. The settings for other AddOns (Questie, Zygor, RestedXP, OpenXP,
+QuestTrail, TomTom) are together
 under "Integrations (Experimental)". DQT needs **Dyre's Toolkit** 2.0 or later (the CurseForge app
 installs it with DQT). With an older toolkit, the macro still works, its
 settings are under Options > AddOns > Dyre's Quest Targeting, there is no
@@ -259,6 +261,23 @@ waypoint stays. It does not move for the step RestedXP restores at login.
 public API, so a RestedXP update can stop it; DQT then follows your quest focus,
 and the macro keeps working.
 
+## With OpenXP
+
+**OpenXP** is a free leveling guide made from RestedXP's. It keeps RestedXP's
+step engine, so DQT reads it the same way: with OpenXP installed, "Follow
+OpenXP's current step" (under "Integrations (Experimental)") is on by default;
+without OpenXP it is greyed out. Everything under [With RestedXP](#with-restedxp)
+applies, with "(OpenXP)" in the box header, `/dqt list`, and chat. OpenXP's own
+quest target buttons are left alone.
+
+With RestedXP and OpenXP both loaded, each is its own guide: the newest step of
+either wins, unless you choose one under [Active guide](#active-guide). At login,
+RestedXP's step comes first.
+
+**Experimental: use it with caution.** It reads OpenXP's own data, not a public
+API, so an OpenXP update can stop it; DQT then follows your quest focus, and the
+macro keeps working.
+
 ## With QuestTrail
 
 With **QuestTrail** installed, "Follow QuestTrail's current step" (under
@@ -295,7 +314,7 @@ instead:
 
 - **Most Recent Focus** (the default): as above.
 - **Questie**: your quest focus only; guide steps are ignored.
-- **Zygor**, **RestedXP**, or **QuestTrail**: that guide's current step drives the
+- **Zygor**, **RestedXP**, **OpenXP**, or **QuestTrail**: that guide's current step drives the
   macro, and each new step also focuses its quest in Questie's tracker. A quest
   you focus yourself, in Questie's tracker or the game's quest log, wins until the
   guide's next step. The focus Questie and the game set by themselves when you

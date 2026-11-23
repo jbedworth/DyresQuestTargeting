@@ -30,10 +30,11 @@ local INTEGRATIONS_HEADING = "Integrations (Experimental)"
 local NEEDS_QUESTIE = " Needs Questie: greyed out until it is installed and on."
 local NO_GAME_FOCUS = " This client has no quest focus of its own, so DQT always follows Questie's."
 local NO_GAME_SYNC = " This client has no quest focus of its own, so there is nothing to sync."
-local NEEDS_QUESTIE_TOMTOM = " Needs TomTom, with Questie, Zygor, RestedXP, or QuestTrail: greyed out until they are "
+local NEEDS_QUESTIE_TOMTOM = " Needs TomTom, with Questie, Zygor, RestedXP, OpenXP, or QuestTrail: greyed out until they are "
     .. "installed and on."
 local NEEDS_ZYGOR = " Needs Zygor Guides Viewer: greyed out until it is installed and on."
 local NEEDS_RXP = " Needs RestedXP: greyed out until it is installed and on."
+local NEEDS_OXP = " Needs OpenXP: greyed out until it is installed and on."
 local NEEDS_QTR = " Needs QuestTrail: greyed out until it is installed and on."
 local BOX_HEADING = "Quest Target Box"
 
@@ -233,13 +234,17 @@ local function RxpLoaded()
     return DQT.RxpAvailable()
 end
 
+local function OxpLoaded()
+    return DQT.OxpAvailable()
+end
+
 local function QuestTrailLoaded()
     return DQT.QuestTrailAvailable()
 end
 
 local function QuestieAndTomTomLoaded()
     return type(TomTom) == "table" and (QuestieLoaded() or DQT.ZygorAvailable() or DQT.RxpAvailable()
-        or DQT.QuestTrailAvailable())
+        or DQT.OxpAvailable() or DQT.QuestTrailAvailable())
 end
 
 local function Needs(initializer, loaded)
@@ -328,6 +333,12 @@ function DQT.InitializeOptions()
             .. "no one leaves the quest focus in charge. RestedXP's own targeting macro is left alone. "
             .. "Experimental: it reads RestedXP's own data, not a public API. Use with caution."
             .. NEEDS_RXP), RxpLoaded)
+    Needs(Flag("DQT_OXP_FOCUS", "Follow OpenXP's current step", "oxpFocus", true,
+        "With OpenXP installed, also target the mobs and NPCs OpenXP names on its current step and "
+            .. "sticky steps. Whichever focus changed last wins; a new step counts as a change. A step that names "
+            .. "no one leaves the quest focus in charge. OpenXP's own quest target buttons are left alone. "
+            .. "Experimental: it reads OpenXP's own data, not a public API. Use with caution."
+            .. NEEDS_OXP), OxpLoaded)
     Needs(Flag("DQT_QTR_FOCUS", "Follow QuestTrail's current step", "qtrFocus", true,
         "With QuestTrail installed, also target the mobs and NPCs of the step its compass points at: the "
             .. "objective, the turn-in, or who gives the quest. Whichever focus changed last wins; a new step counts "
@@ -352,8 +363,8 @@ function DQT.InitializeOptions()
         return container:GetData()
     end, "Which focus drives the macro. Most Recent Focus (the default): whichever changed last, Questie's "
         .. "tracker, the game's quest log or map, or a guide's new step. Questie: your quest focus only; guide "
-        .. "steps are ignored. Zygor, RestedXP, or QuestTrail: that guide's current step, and each new step also "
-        .. "focuses its quest in Questie's tracker. A quest you focus yourself wins until the guide's next step or "
+        .. "steps are ignored. Zygor, RestedXP, OpenXP, or QuestTrail: that guide's current step, and each new step "
+        .. "also focuses its quest in Questie's tracker. A quest you focus yourself wins until the guide's next step or "
         .. "a re-sync (the box's button, /dqt resync, or its key binding). The quest Questie and the game focus by "
         .. "themselves when you accept a quest is ignored. Lists only the AddOns installed and followed above. "
         .. "Experimental: it uses the guides' and Questie's own code, not a public API. Use with caution.")
@@ -372,7 +383,7 @@ function DQT.InitializeOptions()
             end
         end)
     Needs(Settings.CreateCheckbox(category, tomtom,
-        "Points the TomTom arrow at the location of Zygor's, RestedXP's, or QuestTrail's current step, when you "
+        "Points the TomTom arrow at the location of Zygor's, RestedXP's, OpenXP's, or QuestTrail's current step, when you "
             .. "follow one and it has a location. With QuestTrail loaded, the waypoint is set so QuestTrail's compass "
             .. "keeps its own plan. Otherwise, with Questie, at the nearest of the quest mobs the macro looks for "
             .. "(the best droppers, for a quest item), or at the turn-in once the quest is done. It moves when the "

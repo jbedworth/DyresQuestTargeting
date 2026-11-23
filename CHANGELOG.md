@@ -3,6 +3,16 @@
 Player-facing changes for each Dyre's Quest Targeting release, newest first. The
 release builder puts the matching section at the top of each release's notes.
 
+## 1.8.0
+
+### Features
+
+- With OpenXP, the free leveling guide based on RestedXP's: the macro can target the mobs and NPCs on OpenXP's current and sticky steps, as it does for RestedXP. "Follow OpenXP's current step" in the settings, on by default, greyed out without OpenXP. OpenXP is also a choice under "Active guide", and "Point TomTom at the focused quest" follows its step's location. With RestedXP and OpenXP both loaded, the newest step wins, unless you choose one under "Active guide". Experimental: it reads OpenXP's own data, not a public API, so an OpenXP update can stop it; the macro keeps working.
+
+### Other changes
+
+- The login message follows Dyre's Toolkit's "Welcome messages at login" switch (Toolkit 2.14.0 or later). Errors still show.
+
 ## 1.7.1
 
 ### Fixes
