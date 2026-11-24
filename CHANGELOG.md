@@ -3,6 +3,17 @@
 Player-facing changes for each Dyre's Quest Targeting release, newest first. The
 release builder puts the matching section at the top of each release's notes.
 
+## 1.8.1
+
+### Features
+
+- "Say targeting changes in chat" in the settings (on by default). Turn it off to hide the chat lines that say the focused quest changed or that a finished objective's mob left the macro. Errors, problems, and replies to your own commands still show.
+
+### Other changes
+
+- `/dqt debug` now shows the client's language and the language QuestieDB gives names in. On a client that is not English, a mob QuestieDB has no translation for keeps its English name, and the macro then cannot find it by that name.
+- OpenXP support is for OpenXP 1.x only. OpenXP 2.0 is a new AddOn that keeps its data private, so DQT cannot read its steps, and "Follow OpenXP's current step" stays greyed out with it. The setting's tooltip now says so. With OpenXP 2, DQT follows your quest focus as usual.
+
 ## 1.8.0
 
 ### Features

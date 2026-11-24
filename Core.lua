@@ -381,6 +381,9 @@ function DQT.SanitizeDB(db)
     if type(db.smartOrder) ~= "boolean" then
         db.smartOrder = true
     end
+    if type(db.chatUpdates) ~= "boolean" then
+        db.chatUpdates = true
+    end
     db.targetOrder = SanitizeTargetOrder(db.targetOrder)
     if type(db.showBox) ~= "boolean" then
         db.showBox = true
@@ -452,7 +455,8 @@ local function Announce(quest, built)
     local key = quest and (quest.id .. " " .. tostring(quest.objective)) or "none"
     local previous, previousNames = lastFocusKey, lastQuestNames
     lastFocusKey, lastQuestNames = key, QuestNames(quest)
-    if previous == nil then
+    -- "Say targeting changes in chat" off: these lines only inform.
+    if previous == nil or not DQT.db.chatUpdates then
         return
     end
     if previous == key then

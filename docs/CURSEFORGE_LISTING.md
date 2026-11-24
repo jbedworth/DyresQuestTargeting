@@ -53,7 +53,7 @@ CurseForge. The opening sentences are the author's own wording.
 Dyre's Quest Targeting makes it easy to see what quest you are focused on, and builds a targeting macro that you can use to target what you are after. Also lets you manually add your own targets to the "hit list". A targeting macro is built and maintained for you based on what you're trying to do. Works with Questie, if you want the best experience.
 
 ### What it targets
-- The mobs your focused quest still needs killed. Finished objectives drop out by themselves. DQT lets you know in chat when the lists change.
+- The mobs your focused quest still needs killed. Finished objectives drop out by themselves. DQT lets you know in chat when the lists change ("Say targeting changes in chat" turns that off).
 - With QuestieDB installed (the CurseForge app installs it with DQT): the mobs that drop the quest's items, and the NPC you turn it in to once it is done. With Questie, DQT picks the best droppers by Questie's drop rates.
 - A Questie objective focus targets only that objective.
 - Your own hit list, for any mob: `/dqt add Goretusk` finds anything named like it; `/dqt add_exact Great Goretusk` only that name. With nothing typed, they add your target. Your hit list is prioritized over the quest list.
@@ -94,7 +94,7 @@ Each character has its own macro and its own hit list. Short of character macro 
 ### Works with Questie, TomTom, Zygor, RestedXP, OpenXP, and QuestTrail
 All six are optional, and their settings are together under "Integrations (Experimental)". A setting whose AddOn is missing is greyed out. Use these with caution: they use the other AddOns' own code or data, not a public API.
 - Follow Questie's tracker focus (on by default): DQT follows the quest you focus in the game's quest log or map, or in Questie's tracker, whichever you set last. Chat says when the focused quest changes. Without Questie it still targets kill objectives and your hit list.
-- Follow Zygor's current step, Follow RestedXP's current step, Follow OpenXP's current step, and Follow QuestTrail's current step (on by default): see above. OpenXP, the free guide made from RestedXP's, works as RestedXP does.
+- Follow Zygor's current step, Follow RestedXP's current step, Follow OpenXP's current step, and Follow QuestTrail's current step (on by default): see above. OpenXP 1.x, the free guide made from RestedXP's, works as RestedXP does. Only OpenXP 1.x: OpenXP 2.0 and later keep their data private, so DQT cannot follow their steps and the setting stays greyed out.
 - Active guide (Most Recent Focus by default): choose Questie, Zygor, RestedXP, OpenXP, or QuestTrail to drive the macro. With a guide, each new step also focuses its quest in Questie's tracker, and the quest Questie focuses by itself when you accept one is ignored. A re-sync button on the box, `/dqt resync`, and a key binding go back to the guide's step.
 - Keep Questie's and the game's focus in sync (off by default).
 - Point TomTom at the focused quest (off by default; needs TomTom, with Questie, Zygor, RestedXP, OpenXP, or QuestTrail): on a Zygor, RestedXP, OpenXP, or QuestTrail step with a location, points the TomTom arrow there and moves on with the guide's next waypoint. Otherwise, with Questie, it points at the nearest of the mobs and NPCs the macro looks for, or at the turn-in once the quest is done.

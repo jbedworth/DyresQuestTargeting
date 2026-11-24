@@ -741,7 +741,7 @@ local CONDOR_QUEST = {[101] = {title = "The Condor Hunt", objectives = {
 
 test("logs in with a banner and makes the character macro", function()
     local state = fixture()
-    contains(state.messages[1], "DQT: Dyre's Quest Targeting 1.8.0 by Dyre")
+    contains(state.messages[1], "DQT: Dyre's Quest Targeting 1.8.1 by Dyre")
     equal(state.said("Ready."), true)
     equal(state.dqt.available, true)
     contains(state.macro(), "nothing to target")
@@ -751,21 +751,21 @@ end)
 test("welcome: the banner follows Dyre's Toolkit's switch; problems always show", function()
     for _, options in ipairs({{noToolkit = true}, {showWelcome = "absent"}, {showWelcome = true}}) do
         local state = fixture(options)
-        equal(state.said("Dyre's Quest Targeting 1.8.0 by Dyre"), true)
+        equal(state.said("Dyre's Quest Targeting 1.8.1 by Dyre"), true)
         equal(state.said("Ready."), true)
     end
     local state = fixture({showWelcome = false})
-    equal(state.said("Dyre's Quest Targeting 1.8.0"), false)
+    equal(state.said("Dyre's Quest Targeting 1.8.1"), false)
     equal(state.said("Ready."), false)
     equal(state.dqt.available, true)
     equal(state.said("Made the character macro"), true)
     -- The real switch, when the toolkit in use has it (2.14.0 or later).
     state = fixture({toolkitDB = {welcome = false}})
     if state.toolkit.ShowWelcome then
-        equal(state.said("Dyre's Quest Targeting 1.8.0"), false)
+        equal(state.said("Dyre's Quest Targeting 1.8.1"), false)
     end
     state = fixture({oldToolkit = true, showWelcome = false})
-    equal(state.said("Dyre's Quest Targeting 1.8.0"), false)
+    equal(state.said("Dyre's Quest Targeting 1.8.1"), false)
     equal(state.said("install or update it from CurseForge"), true)
 end)
 
@@ -924,6 +924,61 @@ test("a finished objective's names leave the macro, with a word in chat", functi
     equal(state.last(), "DQT: Redridge Poacher removed: Quest Assessing the Threat objective completed. "
         .. "Use /dqt add if you want to keep targeting them.")
     contains(state.macro(), "nothing to target")
+end)
+
+test("Say targeting changes in chat off hides only those lines", function()
+    local quest = {title = "Assessing the Threat", objectives = {objective("9/10 Redridge Mongrel slain"),
+        objective("0/6 Redridge Poacher slain")}}
+    local quests = {[246] = quest}
+    for id, other in pairs(THREE_QUESTS) do quests[id] = other end
+    local state = fixture({quests = quests, focus = 246})
+    equal(state.settings.DQT_CHAT_UPDATES.default, true)
+    equal(state.env.DyresQuestTargetingDB.chatUpdates, true, "on by default")
+    state.settings.DQT_CHAT_UPDATES:SetValue(false)
+    state.clear()
+    quest.objectives[1] = objective("10/10 Redridge Mongrel slain", "monster", true)
+    state.emit("QUEST_WATCH_UPDATE", 246)
+    state.advance()
+    lacks(state.macro(), "Redridge Mongrel")
+    state.focus = 3
+    state.emit("SUPER_TRACKING_CHANGED")
+    state.advance()
+    contains(state.macro(), "/targetexact Kobold")
+    state.focus = nil
+    state.emit("SUPER_TRACKING_CHANGED")
+    state.advance()
+    equal(#state.messages, 0, "no removed, focus, or no-focus line")
+    state.slash("add Skeletal Mage")
+    equal(state.said("Skeletal Mage"), true, "a reply to your own command still shows")
+    state.slash("add a;b")
+    equal(#state.messages >= 2, true, "a refused name still says why")
+    state.settings.DQT_CHAT_UPDATES:SetValue(true)
+    state.clear()
+    state.focus = 3
+    state.emit("SUPER_TRACKING_CHANGED")
+    state.advance()
+    equal(state.said("Focused quest changed via Quest Focus (Kobolds)"), true, "on again")
+    local repaired = fixture({saved = {chatUpdates = "no"}})
+    equal(repaired.env.DyresQuestTargetingDB.chatUpdates, true, "repaired on load")
+end)
+
+test("debug names the client's language and QuestieDB's", function()
+    local state = fixture({quests = CONDOR_QUEST, focus = 101, db = {quests = {}, npcs = {}, items = {}}})
+    state.slash("debug")
+    equal(state.said("debug client locale=unknown QuestieDB names=no translation layer (English names)"), true)
+    state.env.GetLocale = function() return "frFR" end
+    state.env.LibQuestieDB.l10n = {currentLocale = "frFR", IsAvailable = function() return true end}
+    state.clear()
+    state.slash("debug")
+    equal(state.said("debug client locale=frFR QuestieDB names=frFR"), true)
+    state.env.LibQuestieDB.l10n = {currentLocale = "enUS", IsAvailable = function() return false end}
+    state.clear()
+    state.slash("debug")
+    equal(state.said("QuestieDB names=enUS (no translations loaded: English names)"), true)
+    local none = fixture({quests = CONDOR_QUEST, focus = 101})
+    none.env.GetLocale = function() return "frFR" end
+    none.slash("debug")
+    equal(none.said("debug client locale=frFR QuestieDB names=none"), true)
 end)
 
 test("turning off Follow Questie's tracker focus leaves only the game's", function()
@@ -3360,7 +3415,7 @@ test("oxp: OpenXP's step drives the macro as RestedXP's, with its own setting an
     equal(state.said("debug OpenXP: not followed"), true)
     local none = fixture({quests = TWO_QUESTS, focus = 1, saved = {oxpFocus = true}})
     equal(settingRow(none, "DQT_OXP_FOCUS"):Enabled(), false, "greyed out without OpenXP")
-    contains(settingRow(none, "DQT_OXP_FOCUS").tooltip, "Needs OpenXP: greyed out")
+    contains(settingRow(none, "DQT_OXP_FOCUS").tooltip, "Needs OpenXP 1.3.66 or earlier: greyed out")
     equal(none.env.DyresQuestTargetingDB.oxpFocus, true, "the saved value stays")
     local repaired = fixture({saved = {oxpFocus = "yes"}})
     equal(repaired.env.DyresQuestTargetingDB.oxpFocus, true, "repaired on load")

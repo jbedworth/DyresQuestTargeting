@@ -177,6 +177,10 @@ style. It applies at once, with no reload, and only out of combat. Your hit list
 and your "On a mob, also" spell stay with each character: the hit list is your
 quests' mobs, and the spell comes from that character's spellbook.
 
+**Say targeting changes in chat** (on by default): chat says when the focused
+quest changes and when a finished objective's mob leaves the macro. Turn it off
+to hide those lines. Errors, problems, and replies to your own commands still show.
+
 ## Without Questie
 
 Questie is optional. Without it, the settings that need Questie are greyed
@@ -263,8 +267,14 @@ and the macro keeps working.
 
 ## With OpenXP
 
-**OpenXP** is a free leveling guide made from RestedXP's. It keeps RestedXP's
-step engine, so DQT reads it the same way: with OpenXP installed, "Follow
+**Only OpenXP 1.x.** OpenXP 2.0 is a new AddOn: it keeps its data private and
+has no public API, so DQT cannot read its steps, and "Follow OpenXP's current
+step" stays greyed out. With OpenXP 2, DQT follows your quest focus (Questie's
+tracker or the game's), and your hit list works as always. Support for OpenXP 2
+needs a public way to read its current step, which only OpenXP's authors can add.
+
+**OpenXP** 1.x is a free leveling guide made from RestedXP's. It keeps RestedXP's
+step engine, so DQT reads it the same way: with OpenXP 1.x installed, "Follow
 OpenXP's current step" (under "Integrations (Experimental)") is on by default;
 without OpenXP it is greyed out. Everything under [With RestedXP](#with-restedxp)
 applies, with "(OpenXP)" in the box header, `/dqt list`, and chat. OpenXP's own

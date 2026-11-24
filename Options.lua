@@ -34,7 +34,8 @@ local NEEDS_QUESTIE_TOMTOM = " Needs TomTom, with Questie, Zygor, RestedXP, Open
     .. "installed and on."
 local NEEDS_ZYGOR = " Needs Zygor Guides Viewer: greyed out until it is installed and on."
 local NEEDS_RXP = " Needs RestedXP: greyed out until it is installed and on."
-local NEEDS_OXP = " Needs OpenXP: greyed out until it is installed and on."
+local NEEDS_OXP = " Needs OpenXP 1.3.66 or earlier: greyed out until it is installed and on. OpenXP 2.0 and later "
+    .. "give no data DQT can read, so it stays greyed out with them."
 local NEEDS_QTR = " Needs QuestTrail: greyed out until it is installed and on."
 local BOX_HEADING = "Quest Target Box"
 
@@ -308,6 +309,10 @@ function DQT.InitializeOptions()
         "On (the default): the macro wants rare and named mobs first, then the mobs that drop the quest's "
             .. "items (highest drop rate first), then the mobs you kill for it. Off: the quest's own order. An "
             .. "order you drag in the Quest Target Box wins over both.")
+    Flag("DQT_CHAT_UPDATES", "Say targeting changes in chat", "chatUpdates", true,
+        "On (the default): chat says when the focused quest changes and when a finished objective's mob leaves "
+            .. "the macro. Off: those lines are not shown. Errors, problems, and replies to your own commands always "
+            .. "show.")
     -- Every integration with another AddOn, under one heading that says
     -- "(Experimental)" (author, 1.3.0); the names do not.
     Heading(INTEGRATIONS_HEADING)
@@ -334,7 +339,7 @@ function DQT.InitializeOptions()
             .. "Experimental: it reads RestedXP's own data, not a public API. Use with caution."
             .. NEEDS_RXP), RxpLoaded)
     Needs(Flag("DQT_OXP_FOCUS", "Follow OpenXP's current step", "oxpFocus", true,
-        "With OpenXP installed, also target the mobs and NPCs OpenXP names on its current step and "
+        "With OpenXP (up to 1.3.66) installed, also target the mobs and NPCs OpenXP names on its current step and "
             .. "sticky steps. Whichever focus changed last wins; a new step counts as a change. A step that names "
             .. "no one leaves the quest focus in charge. OpenXP's own quest target buttons are left alone. "
             .. "Experimental: it reads OpenXP's own data, not a public API. Use with caution."

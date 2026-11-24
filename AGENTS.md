@@ -182,6 +182,11 @@ prefix `DQT:`. Listings say plainly that it is for WoW: Forever.
   quest complete) is said in chat (author-approved): "<name> removed: Quest
   <title> objective completed. Use /dqt add if you want to keep targeting
   them.", plus "The macro updates after combat." while the write waits.
+- "Say targeting changes in chat" (`db.chatUpdates`, default on; author, 1.8.1:
+  "add an option to hide the chat lines for non-critical updates", after a frFR
+  player asked): off hides the two kinds of line above (focus changed or none, and
+  removed). Errors, problems, and replies to the player's own commands always show.
+  In the macro's settings, after "Smart targeting mode"; part of the profile.
 - Rebuilds follow `QUEST_LOG_UPDATE` (as Blizzard's tracker), backed up by
   `QUEST_WATCH_UPDATE` and the player's `UNIT_QUEST_LOG_CHANGED`.
 - `/dqt` passes text with "[" to `SecureCmdOptionParse` (a legacy global,
@@ -361,6 +366,16 @@ CC BY-NC-SA 4.0; DQT copies none of it and only reads its fields): a fork of
 RestedXP (NOTICE.md: upstream commit `b9f2e25`, 2026-11-07) whose new guide card
 keeps RestedXP's window running hidden as the step engine. Tests mock only its fields.
 
+OpenXP 1.x only (author, 2026-11-24: "Do B, update the docs to say 1.x only"). OpenXP
+2.0.4 (2026-11-23, GPL-3.0, 1-20 guides from PoleStar; https://github.com/mjared123/OpenXP)
+is a rewrite: no AceAddon, no `RXPFrame`, no LibStub library of its own, and its engine
+is the private namespace (Core/Init.lua: modules talk "never through globals"). So
+`DQT.OxpAvailable` is false and the switch stays greyed out; the tooltip, README, and
+listing say 1.x only (tooltip: "Needs OpenXP 1.3.66 or earlier", author 2026-11-24). Rejected: reading its target row frames
+(`OpenXPTargetButton`, `OpenXPTargetRow2`-`5`: `unitName`, `enemy`), UI fields with at
+most 5 names, no step, quest, or location. Support for 2.x waits for a public read API
+from OpenXP's authors (the current step's names, its quest, its location, a change signal).
+
 - The same engine as RestedXP under another AceAddon name, "OpenXP" (Locale.lua:5).
   Quest.lua's `RXP_ENGINES` holds both (`rxp`: "RXPGuides", `oxp`: "OpenXP"), each with
   its own name ("RestedXP", "OpenXP") and setting; every RestedXP rule above applies to
@@ -485,7 +500,8 @@ step", "Follow RestedXP's current step", "Follow OpenXP's current step", "Follow
 QuestTrail's current step", "Active
 guide", "Keep Questie's and the game's focus in sync", and "Point TomTom at the focused
 quest". Above it, the macro's own settings: the switch, the
-markers, the opener, the account-wide macro, and "Smart targeting mode". Only the place changed:
+markers, the opener, the account-wide macro, "Smart targeting mode", and "Say
+targeting changes in chat". Only the place changed:
 saved keys, defaults, greying, and dependencies stay.
 
 Without their AddOns (author, 1.1.1), "Follow Questie's tracker focus" and
@@ -718,7 +734,9 @@ minimap menu, and widgets (contract 2). The Quest Target box is a widget.
   `reset` (the hit list), `on`, `off` (the macro switch), `resync` (the active guide), `unlock` and `lock`
   (the toolkit's `Unlock`/`Lock`, as `/mtf` and `/dbr`: the toolkit's one
   `Dyre:` line, no DQT line), `reset_box` (`ResetWidgets`; not `reset`, which
-  already clears the hit list), `debug` (runs even when DQT is unavailable). Backup slash `/questtargeting`; a clash on `/dqt` is
+  already clears the hit list), `debug` (runs even when DQT is unavailable; 1.8.1 adds the client's `GetLocale()` and
+  QuestieDB's name language, `LibQuestieDB.l10n.currentLocale`, a private field shown only,
+  because QuestieDB 1.1.4 has French names for 10,945 of 15,560 NPC IDs and the rest stay English). Backup slash `/questtargeting`; a clash on `/dqt` is
   reported once at login.
 
 ### Later (discussed, not agreed to build)

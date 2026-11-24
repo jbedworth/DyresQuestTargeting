@@ -1929,6 +1929,19 @@ end
 function DQT.ReportQuestDebug()
     local db, reason = Database()
     DQT.Report("debug QuestieDB: " .. (db and "loaded" or reason))
+    -- The client's language, and the one QuestieDB gives names in (its
+    -- LibQuestieDB.l10n, private: shown only, type-checked).
+    local locale
+    if type(GetLocale) == "function" then
+        locale = GetLocale()
+    end
+    local l10n = type(_G.LibQuestieDB) == "table" and _G.LibQuestieDB.l10n
+    local names = "no translation layer (English names)"
+    if type(l10n) == "table" and type(l10n.currentLocale) == "string" then
+        local available = type(l10n.IsAvailable) == "function" and l10n.IsAvailable()
+        names = l10n.currentLocale .. (available and "" or " (no translations loaded: English names)")
+    end
+    DQT.Report("debug client locale=" .. (locale ~= nil and DQT.Describe(locale) or "unknown") .. " QuestieDB names=" .. (db and names or "none"))
     local questieID, questieObjective = QuestieFocus()
     local gameFocus = DQT.HasGameFocus() and DQT.Describe(C_SuperTrack.GetSuperTrackedQuestID()) or "none on this client"
     DQT.Report("debug game focus=" .. gameFocus .. " Questie focus="
