@@ -12,7 +12,7 @@ release builder puts the matching section at the top of each release's notes.
 ### Other changes
 
 - `/dqt debug` now shows the client's language and the language QuestieDB gives names in. On a client that is not English, a mob QuestieDB has no translation for keeps its English name, and the macro then cannot find it by that name.
-- OpenXP support is for OpenXP 1.x only. OpenXP 2.0 is a new AddOn that keeps its data private, so DQT cannot read its steps, and "Follow OpenXP's current step" stays greyed out with it. The setting's tooltip now says so. With OpenXP 2, DQT follows your quest focus as usual.
+- OpenXP support is for OpenXP 1.x only. OpenXP 2.0 is a new AddOn that keeps its data private, so DQT cannot read its steps, and "Follow OpenXP's current step" stays greyed out with it. The setting's tooltip now says so. DQT then follows your focused quest (the game's quest log, or Questie's tracker) instead.
 
 ## 1.8.0
 

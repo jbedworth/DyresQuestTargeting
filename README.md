@@ -269,9 +269,9 @@ and the macro keeps working.
 
 **Only OpenXP 1.x.** OpenXP 2.0 is a new AddOn: it keeps its data private and
 has no public API, so DQT cannot read its steps, and "Follow OpenXP's current
-step" stays greyed out. With OpenXP 2, DQT follows your quest focus (Questie's
-tracker or the game's), and your hit list works as always. Support for OpenXP 2
-needs a public way to read its current step, which only OpenXP's authors can add.
+step" stays greyed out. DQT then follows your focused quest (the game's quest
+log, or Questie's tracker) instead, and your hit list works as always. Support
+for OpenXP 2.0 and later needs a public way to read its current step, which only OpenXP's authors can add.
 
 **OpenXP** 1.x is a free leveling guide made from RestedXP's. It keeps RestedXP's
 step engine, so DQT reads it the same way: with OpenXP 1.x installed, "Follow
