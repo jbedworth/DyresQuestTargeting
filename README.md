@@ -111,7 +111,7 @@ front of you.
 
 `/questtargeting` works the same, in case another AddOn uses `/dqt`.
 
-Key bindings: under Options > Key Bindings > AddOns > Dyre's Quest Targeting,
+Key bindings: under Options > Key Bindings > Dyre's AddOns,
 bind "Add target to the hit list", "Add target to the hit list (exact name)",
 "Remove target from the hit list", and "Re-sync with your active guide". Each
 does what `/dqt add`, `/dqt add_exact`, `/dqt remove`, or `/dqt resync` does with

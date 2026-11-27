@@ -659,7 +659,12 @@ local function fixture(options)
         state.toolkitNS = {InitializeMinimap = function() end}
         for _, path in ipairs(TOOLKIT_FILES) do
             -- options.noProfiles: a toolkit older than 2.10.0, with no profiles.
-            if path == "Profiles.lua" and options.noProfiles then break end
+            -- Toolkit 2.17.0's Core calls Profiles.lua's AddProfileSettings at
+            -- login; an older Core did not, so the stub stands in for that.
+            if path == "Profiles.lua" and options.noProfiles then
+                state.toolkitNS.AddProfileSettings = state.toolkitNS.AddProfileSettings or function() end
+                break
+            end
             local chunk = assert(loadfile(TOOLKIT_DIR .. path))
             setfenv(chunk, env)
             chunk("DyresToolkit", state.toolkitNS)
@@ -741,7 +746,7 @@ local CONDOR_QUEST = {[101] = {title = "The Condor Hunt", objectives = {
 
 test("logs in with a banner and makes the character macro", function()
     local state = fixture()
-    contains(state.messages[1], "DQT: Dyre's Quest Targeting 1.8.2 by Dyre")
+    contains(state.messages[1], "DQT: Dyre's Quest Targeting 1.8.3 by Dyre")
     equal(state.said("Ready."), true)
     equal(state.dqt.available, true)
     contains(state.macro(), "nothing to target")
@@ -751,21 +756,21 @@ end)
 test("welcome: the banner follows Dyre's Toolkit's switch; problems always show", function()
     for _, options in ipairs({{noToolkit = true}, {showWelcome = "absent"}, {showWelcome = true}}) do
         local state = fixture(options)
-        equal(state.said("Dyre's Quest Targeting 1.8.2 by Dyre"), true)
+        equal(state.said("Dyre's Quest Targeting 1.8.3 by Dyre"), true)
         equal(state.said("Ready."), true)
     end
     local state = fixture({showWelcome = false})
-    equal(state.said("Dyre's Quest Targeting 1.8.2"), false)
+    equal(state.said("Dyre's Quest Targeting 1.8.3"), false)
     equal(state.said("Ready."), false)
     equal(state.dqt.available, true)
     equal(state.said("Made the character macro"), true)
     -- The real switch, when the toolkit in use has it (2.14.0 or later).
     state = fixture({toolkitDB = {welcome = false}})
     if state.toolkit.ShowWelcome then
-        equal(state.said("Dyre's Quest Targeting 1.8.2"), false)
+        equal(state.said("Dyre's Quest Targeting 1.8.3"), false)
     end
     state = fixture({oldToolkit = true, showWelcome = false})
-    equal(state.said("Dyre's Quest Targeting 1.8.2"), false)
+    equal(state.said("Dyre's Quest Targeting 1.8.3"), false)
     equal(state.said("install or update it from CurseForge"), true)
 end)
 
@@ -1473,7 +1478,8 @@ local function bindings()
     local found = {}
     for attributes, body in text:gmatch("<Binding%s+(.-)>(.-)</Binding>") do
         found[#found + 1] = {name = attributes:match('name="([^"]+)"'),
-            header = attributes:match('header="([^"]+)"'), body = body}
+            header = attributes:match('header="([^"]+)"'), category = attributes:match('category="([^"]+)"'),
+            body = body}
     end
     return found
 end
@@ -1482,6 +1488,11 @@ test("key bindings: add, add exact, and remove the target, and re-sync, through 
     local found = bindings()
     equal(#found, 4)
     equal(found[1].header, "DYRESQUESTTARGETING", "one header, on the first")
+    for _, binding in ipairs(found) do
+        -- The category names the Key Bindings section (Keybindings.lua GetBindingCategoryName:
+        -- a global's text, else the string itself); a header only makes a blank gap.
+        equal(binding.category, "Dyre's AddOns", binding.name .. " is in the family's own section")
+    end
     local state = fixture()
     equal(state.env.BINDING_HEADER_DYRESQUESTTARGETING, "Dyre's Quest Targeting")
     local run = {}

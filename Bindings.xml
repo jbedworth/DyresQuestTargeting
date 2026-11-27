@@ -1,14 +1,14 @@
 <Bindings>
-    <Binding name="DQT_ADD_TARGET" header="DYRESQUESTTARGETING" category="ADDONS">
+    <Binding name="DQT_ADD_TARGET" header="DYRESQUESTTARGETING" category="Dyre's AddOns">
         SlashCmdList.DYRESQUESTTARGETING("add")
     </Binding>
-    <Binding name="DQT_ADD_TARGET_EXACT" category="ADDONS">
+    <Binding name="DQT_ADD_TARGET_EXACT" category="Dyre's AddOns">
         SlashCmdList.DYRESQUESTTARGETING("add_exact")
     </Binding>
-    <Binding name="DQT_REMOVE_TARGET" category="ADDONS">
+    <Binding name="DQT_REMOVE_TARGET" category="Dyre's AddOns">
         SlashCmdList.DYRESQUESTTARGETING("remove")
     </Binding>
-    <Binding name="DQT_RESYNC" category="ADDONS">
+    <Binding name="DQT_RESYNC" category="Dyre's AddOns">
         SlashCmdList.DYRESQUESTTARGETING("resync")
     </Binding>
 </Bindings>

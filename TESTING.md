@@ -172,8 +172,8 @@ With `/dqt debug` for details:
     from TomTom). Focus a quest in Questie's tracker: TomTom points at its mob, and
     QuestTrail still keeps its plan. `/dqt debug` shows "QuestTrail: step ...". No
     Lua errors.
-32. Key bindings: Options > Key Bindings > AddOns shows "Dyre's Quest
-    Targeting" with four bindings. Bind each to a key. Target a mob: the add
+32. Key bindings: Options > Key Bindings has a "Dyre's AddOns" section (not
+    under AddOns) with DQT's four bindings, beside Dyre's Toolkit's. Bind each to a key. Target a mob: the add
     key adds it with similar names, the exact key with its exact name, the
     remove key takes it off; with no target, the add key says "Target a mob or
     type a name.". With no guide chosen, the re-sync key says "Re-sync needs an

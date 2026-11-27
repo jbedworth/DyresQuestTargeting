@@ -726,7 +726,11 @@ minimap menu, and widgets (contract 2). The Quest Target box is a widget.
 ### Commands
 
 - Key bindings (author-approved, 1.4.1): Bindings.xml, header
-  "Dyre's Quest Targeting" (category ADDONS, as Dyre's Tank Tools), with "Add
+  "Dyre's Quest Targeting", category "Dyre's AddOns" on every binding (Toolkit lead,
+  2026-11-26, John: ours "should not be there" under AddOns; Toolkit 2.16.0 does the
+  same): the category is the section's name (Keybindings.lua `GetBindingCategoryName`,
+  a global's text or the string itself), and a header only makes a blank gap. Keys
+  are saved by binding name, so bound keys stay. With "Add
   target to the hit list", "Add target to the hit list (exact name)", "Remove
   target from the hit list", and "Re-sync with your active guide". Each runs
   `SlashCmdList.DYRESQUESTTARGETING` with `add`, `add_exact`, `remove`, or `resync`, so it has the same checks and works in combat;

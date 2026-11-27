@@ -3,6 +3,12 @@
 Player-facing changes for each Dyre's Quest Targeting release, newest first. The
 release builder puts the matching section at the top of each release's notes.
 
+## 1.8.3
+
+### Other changes
+
+- DQT's key bindings moved from the AddOns list to their own "Dyre's AddOns" section under Options > Key Bindings, with the other Dyre's AddOns. Keys you already bound stay bound.
+
 ## 1.8.2
 
 ### Fixes
