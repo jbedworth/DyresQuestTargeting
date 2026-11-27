@@ -32,8 +32,14 @@ prefix `DQT:`. Listings say plainly that it is for WoW: Forever.
   for in combat waits for `PLAYER_REGEN_ENABLED`. Quest events come in
   bursts; one rebuild 0.2 s after the first covers each.
 - Body, in order: `/cleartarget`; one line per name, least important first
-  (every line runs and the last one that finds a unit wins); `/targetlasttarget
-  [dead]`; the marker line; the opener line. At most 255 letters: when full,
+  (every line runs and the last one that finds a unit wins); the marker line;
+  the opener line; `/targetlasttarget [dead]`. The go-back line is last (author,
+  1.8.2, as RestedXP's macro: a player reported marks on an ally and on a mob that
+  was not a quest mob): after `/cleartarget`, the last target is the player's own,
+  so a corpse brought it back, and a marker after the go-back line marked it. Now
+  the marker and opener see only the unit found, and `nodead` skips a corpse. Cost:
+  a live mob found by an earlier line, with a corpse on a later line, is selected
+  again but not marked. At most 255 letters: when full,
   the least important names are left out, and `/dqt list` says which. With no
   names, a `//` comment says so.
 - Markers (author-approved): one line, `/tm [harm,nodead] !8;

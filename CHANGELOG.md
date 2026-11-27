@@ -3,6 +3,12 @@
 Player-facing changes for each Dyre's Quest Targeting release, newest first. The
 release builder puts the matching section at the top of each release's notes.
 
+## 1.8.2
+
+### Fixes
+
+- The macro no longer marks or attacks your old target. When it found only a corpse, it went back to the unit you had targeted before and put a marker on it: a green triangle on a party member, or a skull on a mob that was not a quest mob. It still goes back to that unit, but now marks and attacks only a live mob or NPC it found.
+
 ## 1.8.1
 
 ### Features

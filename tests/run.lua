@@ -741,7 +741,7 @@ local CONDOR_QUEST = {[101] = {title = "The Condor Hunt", objectives = {
 
 test("logs in with a banner and makes the character macro", function()
     local state = fixture()
-    contains(state.messages[1], "DQT: Dyre's Quest Targeting 1.8.1 by Dyre")
+    contains(state.messages[1], "DQT: Dyre's Quest Targeting 1.8.2 by Dyre")
     equal(state.said("Ready."), true)
     equal(state.dqt.available, true)
     contains(state.macro(), "nothing to target")
@@ -751,21 +751,21 @@ end)
 test("welcome: the banner follows Dyre's Toolkit's switch; problems always show", function()
     for _, options in ipairs({{noToolkit = true}, {showWelcome = "absent"}, {showWelcome = true}}) do
         local state = fixture(options)
-        equal(state.said("Dyre's Quest Targeting 1.8.1 by Dyre"), true)
+        equal(state.said("Dyre's Quest Targeting 1.8.2 by Dyre"), true)
         equal(state.said("Ready."), true)
     end
     local state = fixture({showWelcome = false})
-    equal(state.said("Dyre's Quest Targeting 1.8.1"), false)
+    equal(state.said("Dyre's Quest Targeting 1.8.2"), false)
     equal(state.said("Ready."), false)
     equal(state.dqt.available, true)
     equal(state.said("Made the character macro"), true)
     -- The real switch, when the toolkit in use has it (2.14.0 or later).
     state = fixture({toolkitDB = {welcome = false}})
     if state.toolkit.ShowWelcome then
-        equal(state.said("Dyre's Quest Targeting 1.8.1"), false)
+        equal(state.said("Dyre's Quest Targeting 1.8.2"), false)
     end
     state = fixture({oldToolkit = true, showWelcome = false})
-    equal(state.said("Dyre's Quest Targeting 1.8.1"), false)
+    equal(state.said("Dyre's Quest Targeting 1.8.2"), false)
     equal(state.said("install or update it from CurseForge"), true)
 end)
 
@@ -775,9 +775,10 @@ test("kill objectives become /targetexact lines, the first objective last", func
     equal(body[1], "/cleartarget")
     equal(body[2], "/targetexact Tarantula")
     equal(body[3], "/targetexact Dire Condor")
-    equal(body[4], "/targetlasttarget [dead]")
-    equal(body[5], "/tm [harm,nodead] !8; [exists,noharm,nodead] !4",
+    equal(body[4], "/tm [harm,nodead] !8; [exists,noharm,nodead] !4",
         "the NPC clause needs a target: with none, noharm is true")
+    equal(body[5], "/targetlasttarget [dead]",
+        "last: a corpse brings the old target back, after the marker, so it is not marked")
     equal(body[6], nil, "no opener by default")
 end)
 
@@ -1427,7 +1428,8 @@ test("/dqt add uses a similar-name /tar line, add_exact /targetexact, both after
     local body = lines(state.macro())
     equal(body[4], "/tar Goretusk")
     equal(body[5], "/targetexact Great Goretusk")
-    equal(body[6], "/targetlasttarget [dead]")
+    equal(body[6], "/tm [harm,nodead] !8; [exists,noharm,nodead] !4")
+    equal(body[7], "/targetlasttarget [dead]")
     state.slash("add_exact goretusk")
     contains(state.macro(), "/targetexact Great Goretusk\n/targetexact goretusk\n", "adding again switches kind")
     lacks(state.macro(), "/tar Goretusk")
@@ -1714,10 +1716,11 @@ test("the opener lists every spellbook spell and rank, and casts the one picked"
         "harmful spells of 1 second or less only: no Wrath (1.5 s), no Mark of the Wild (helpful)")
     opener.setting:SetValue("Moonfire(Rank 1)")
     local body = lines(state.macro())
-    equal(body[#body], "/use [harm,nodead] Moonfire(Rank 1)")
+    equal(body[#body - 1], "/use [harm,nodead] Moonfire(Rank 1)", "the opener comes before the go-back line")
+    equal(body[#body], "/targetlasttarget [dead]")
     opener.setting:SetValue("startattack")
     body = lines(state.macro())
-    equal(body[#body], "/startattack [harm,nodead]")
+    equal(body[#body - 1], "/startattack [harm,nodead]")
     opener.setting:SetValue("Bad; Spell")
     equal(state.env.DyresQuestTargetingDB.opener, "startattack", "an unsafe name is refused")
     opener.setting:SetValue("")
@@ -1744,7 +1747,7 @@ test("the opener reads ranks in the client's language and casts its own words", 
         "every rank, in the client's words")
     opener.setting:SetValue("Éclat lunaire(Rang 2)")
     local body = lines(state.macro())
-    equal(body[#body], "/use [harm,nodead] Éclat lunaire(Rang 2)")
+    equal(body[#body - 1], "/use [harm,nodead] Éclat lunaire(Rang 2)")
 end)
 
 test("each dropdown sets its own label function, so a pooled frame's stale one is replaced", function()
@@ -3129,7 +3132,7 @@ test("zygor: the step's open goals and its sticky steps become /targetexact line
     equal(state.said("Marshal McBride (talk to)"), true)
     state.slash("add Hogger")
     inOrder(state.macro(), {"Marshal McBride"})
-    contains(state.macro(), "/tar Hogger\n/targetlasttarget", "the hit list still goes last")
+    contains(state.macro(), "/tar Hogger\n/tm ", "the hit list still goes last")
 end)
 
 test("zygor: a plural name is QuestieDB's name for its NPC; raw status fields count too", function()

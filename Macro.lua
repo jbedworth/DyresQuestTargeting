@@ -18,7 +18,8 @@ local MACRO_LIMIT = 255
 -- globals exist only once Blizzard's Macro window has loaded.
 local DEFAULT_ACCOUNT_MACROS, DEFAULT_CHARACTER_MACROS = 120, 30
 
--- A mob that is already dead is skipped: /targetlasttarget [dead] goes back.
+-- A mob that is already dead is skipped: /targetlasttarget [dead], the last line,
+-- goes back.
 -- /tm's "!" leaves a marker that is already there (a second press would
 -- toggle it off), in one line with a clause per kind (SecureCmdOptionParse
 -- takes the first clause whose conditions match).
@@ -59,13 +60,19 @@ local function OpenerLine(opener)
     end
 end
 
+-- The marker and opener come before the go-back line (author, 1.8.2, as RestedXP's
+-- macro does): /cleartarget made the player's own target the last target, so when
+-- the macro finds only a corpse, the go-back line brings that target back, and a
+-- marker after it marked an ally or a mob that is not a quest mob. Before it, both
+-- see the unit the macro found, and nodead skips a corpse.
 local function TrailerLines(settings)
-    local lines = {DEAD_LINE}
+    local lines = {}
     local marker = settings.mark and MarkerLine(settings.mobMarker, settings.npcMarker)
     if marker then
         lines[#lines + 1] = marker
     end
     lines[#lines + 1] = OpenerLine(settings.opener)
+    lines[#lines + 1] = DEAD_LINE
     return lines
 end
 

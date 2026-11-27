@@ -93,8 +93,10 @@ With `/dqt debug` for details:
    Check the objective text Forever gives ("X slain: 0/8" or "0/8 X slain").
 3. Press the macro near a quest mob: it is targeted and gets a skull; a second
    press keeps the skull. With no quest mob near, nothing is targeted.
-4. Only a corpse near: check what `/targetlasttarget [dead]` after
-   `/cleartarget` does (the old target may come back and be marked).
+4. Only a corpse near, with an ally targeted first: the macro brings the ally
+   back and does not mark it. Then target a mob that is not a quest mob, stand
+   near a quest mob's corpse only, and press: the mob comes back with no skull and
+   no attack. A live quest mob near still gets the skull and the opener.
 5. A quest NPC (the turn-in, with QuestieDB): the green triangle. A neutral
    (yellow) NPC: check that `[noharm]` marks it. With nothing found, the
    macro gives no "You can't do that right now".
